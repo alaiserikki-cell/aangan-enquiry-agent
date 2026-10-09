@@ -4,7 +4,7 @@
 
 :root {
   color-scheme: light;
-  --page: #f9f9f7;
+  --page: #f2f2ef;
   --surface: #fcfcfb;
   --surface-2: #f3f2ee;
   --ink: #0b0b0b;
@@ -21,7 +21,9 @@
   --series-1: #2a78d6; /* qualified / in-hours / vaani */
   --series-2: #eb6834; /* declined / after-hours / gemini */
   --series-3: #1baf7a; /* needs review / email */
-  --series-4: #eda100; /* other */
+  --series-4: #eda100; /* existing client */
+  --series-5: #e87ba4; /* not a lead */
+  --series-6: #008300; /* dropped */
 
   --good: #0ca30c;
   --good-text: #006300;
@@ -56,6 +58,8 @@
     --series-2: #d95926;
     --series-3: #199e70;
     --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
 
     --good-text: #0ca30c;
     --critical-text: #f2867d;
@@ -81,6 +85,8 @@
   --series-2: #d95926;
   --series-3: #199e70;
   --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
   --good-text: #0ca30c;
   --critical-text: #f2867d;
 }

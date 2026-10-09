@@ -11,7 +11,7 @@ import styles from "./dashboard.module.css";
 type TipRow = { color?: string; label: string; value: string };
 type Tip = { x: number; y: number; title: string; rows: TipRow[] } | null;
 
-function useTooltip() {
+export function useTooltip() {
   const ref = useRef<HTMLDivElement>(null);
   const [tip, setTip] = useState<Tip>(null);
   const show = (e: { clientX: number; clientY: number } | DOMRect, title: string, rows: TipRow[]) => {
@@ -59,7 +59,7 @@ function topRounded(x: number, y: number, w: number, h: number, r: number) {
   return `M${x},${y + h}V${y + rr}Q${x},${y} ${x + rr},${y}H${x + w - rr}Q${x + w},${y} ${x + w},${y + rr}V${y + h}Z`;
 }
 
-function niceMax(n: number) {
+export function niceMax(n: number) {
   if (n <= 4) return 4;
   const pow = 10 ** Math.floor(Math.log10(n));
   const step = [1, 2, 2.5, 5, 10].map((s) => s * pow).find((s) => s * 4 >= n)!;

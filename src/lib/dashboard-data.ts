@@ -144,3 +144,96 @@ export function previousRange(range: RangeKey, start: Date, end: Date, now = new
 }
 
 export const isCallAfterHours = (c: CallRow) => isAfterHours(when(c));
+
+// ---------------------------------------------------------------------------
+// Service levels (gauges) and designer list, call-centre style.
+
+export const HANDOFF_TARGET_S = 120; // brief: designer email within two minutes of the call ending
+export const ACK_TARGET_S = 2 * 60 * 60; // escalation fires after two hours
+
+export type Level = "good" | "warning" | "critical" | "none";
+
+export interface ServiceLevel {
+  key: string;
+  label: string;
+  /** 0–100, or null when there is nothing to measure yet. */
+  percent: number | null;
+  met: number;
+  total: number;
+  level: Level;
+  detail: string;
+}
+
+function levelFor(percent: number | null, good: number, warn: number): Level {
+  if (percent === null) return "none";
+  return percent >= good ? "good" : percent >= warn ? "warning" : "critical";
+}
+
+const secondsBetween = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / 1000;
+
+export function serviceLevels(calls: CallRow[], handoffs: HandoffRow[]): ServiceLevel[] {
+  const byId = new Map(calls.map((c) => [c.id, c]));
+  const sent = handoffs.filter((h) => h.email_sent_at);
+
+  const timed = sent.filter((h) => byId.get(h.call_id)?.ended_at);
+  const fast = timed.filter((h) => secondsBetween(byId.get(h.call_id)!.ended_at!, h.email_sent_at!) <= HANDOFF_TARGET_S).length;
+
+  const ackedInTime = sent.filter((h) => h.acknowledged_at && secondsBetween(h.email_sent_at!, h.acknowledged_at) <= ACK_TARGET_S).length;
+
+  const qualified = calls.filter((c) => c.outcome === "qualified");
+  const booked = qualified.filter((c) => c.booking_status === "booked").length;
+
+  const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : null);
+  const handoffPct = pct(fast, timed.length);
+  const ackPct = pct(ackedInTime, sent.length);
+  const bookedPct = pct(booked, qualified.length);
+
+  return [
+    { key: "handoff", label: "Brief sent within 2 min", percent: handoffPct, met: fast, total: timed.length, level: levelFor(handoffPct, 90, 70), detail: `${fast} of ${timed.length} briefs` },
+    { key: "ack", label: "Acknowledged within 2 h", percent: ackPct, met: ackedInTime, total: sent.length, level: levelFor(ackPct, 90, 70), detail: `${ackedInTime} of ${sent.length} leads` },
+    { key: "booked", label: "Booked on the call", percent: bookedPct, met: booked, total: qualified.length, level: levelFor(bookedPct, 80, 60), detail: `${booked} of ${qualified.length} qualified` },
+  ];
+}
+
+export interface DesignerStat {
+  id: string;
+  name: string;
+  areas: string[];
+  active: boolean;
+  leads: number;
+  booked: number;
+  acknowledged: number;
+  waiting: number;
+  medianAckSeconds: number | null;
+}
+
+export function designerStats(
+  designers: { id: string; name: string; areas: string[]; active: boolean }[],
+  calls: CallRow[],
+  handoffs: HandoffRow[],
+): DesignerStat[] {
+  const byCall = new Map(calls.map((c) => [c.id, c]));
+  return designers
+    .map((d) => {
+      const mine = handoffs.filter((h) => h.designer_id === d.id && h.email_sent_at);
+      const ackTimes = mine.filter((h) => h.acknowledged_at).map((h) => secondsBetween(h.email_sent_at!, h.acknowledged_at!)).sort((a, b) => a - b);
+      const mid = Math.floor(ackTimes.length / 2);
+      return {
+        id: d.id,
+        name: d.name,
+        areas: d.areas,
+        active: d.active,
+        leads: mine.length,
+        booked: mine.filter((h) => byCall.get(h.call_id)?.booking_status === "booked").length,
+        acknowledged: ackTimes.length,
+        waiting: mine.length - ackTimes.length,
+        medianAckSeconds: ackTimes.length ? (ackTimes.length % 2 ? ackTimes[mid] : (ackTimes[mid - 1] + ackTimes[mid]) / 2) : null,
+      };
+    })
+    .sort((a, b) => Number(b.active) - Number(a.active) || b.leads - a.leads || a.name.localeCompare(b.name));
+}
+
+/** Calls and qualified leads per bucket, for the volume line chart. */
+export function volumeSeries(buckets: Bucket[]) {
+  return buckets.map((b) => ({ key: b.key, label: b.label, title: b.title, calls: b.total, qualified: b.counts.qualified }));
+}

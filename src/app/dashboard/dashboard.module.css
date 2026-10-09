@@ -685,8 +685,482 @@
   min-width: 0;
 }
 
-@media (min-width: 900px) {
-  .grid2 > .card {
-    height: 100%;
+/* ---------- call-centre shell (Voiso-style) ---------- */
+
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.appbarInner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 16px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.wordmark {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.38em;
+  color: var(--brand);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tabs {
+  display: none;
+  height: 100%;
+  gap: 22px;
+}
+
+@media (min-width: 720px) {
+  .tabs {
+    display: flex;
   }
+}
+
+.tabs a {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  font-size: 14px;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tabs a:hover {
+  color: var(--ink);
+}
+
+.tabs a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 500;
+  border-bottom-color: var(--brand);
+}
+
+.appbarRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.appbarRight strong {
+  display: block;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.avatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-weight: 600;
+  font-size: 13px;
+  position: relative;
+}
+
+.avatar::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--good);
+  border: 2px solid var(--surface);
+}
+
+.shell {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.pageHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.pageTitle {
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.pageSub {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.widgets {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 960px) {
+  .widgets {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .span4 {
+    grid-column: span 4;
+  }
+  .span5 {
+    grid-column: span 5;
+  }
+  .span7 {
+    grid-column: span 7;
+  }
+  .span8 {
+    grid-column: span 8;
+  }
+  .span12 {
+    grid-column: span 12;
+  }
+}
+
+.widget {
+  container-type: inline-size;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px 20px;
+  min-width: 0;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.widgetHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.widgetTitle {
+  font-size: 17px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.widgetSub {
+  font-size: 13px;
+  color: var(--series-1);
+  margin: 4px 0 0;
+}
+
+.widgetMeta {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* donut */
+
+.donutWrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 18px;
+}
+
+/* Side-by-side only when the card itself is wide enough (container query, not viewport). */
+@container (min-width: 420px) {
+  .donutWrap {
+    grid-template-columns: 190px 1fr;
+  }
+}
+
+.donutChart {
+  position: relative;
+  width: 190px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.donutChart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.donutSeg {
+  outline: none;
+  transition: stroke-width 120ms ease;
+  cursor: default;
+}
+
+.donutCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.donutTotalLabel {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.donutTotal {
+  font-size: 52px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  margin-top: 2px;
+}
+
+.donutLegend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.donutLegend li {
+  display: grid;
+  grid-template-columns: 10px 1fr auto 3.2em;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.donutLegendActive {
+  background: var(--surface-2);
+}
+
+.donutLegendLabel {
+  color: var(--ink-2);
+}
+
+.donutLegend strong {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.donutLegendPct {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.legendDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+/* gauges */
+
+.gauges {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+@media (min-width: 720px) {
+  .gauges {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.gauge svg {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  display: block;
+}
+
+.gaugeValue {
+  fill: var(--ink);
+  font-size: 38px;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
+
+.levelPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.gaugeDetail {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gaugeDetail strong {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+/* status widget: ring stats + key/value list + cells */
+
+.statusTop {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  align-items: center;
+}
+
+@container (min-width: 600px) {
+  .statusTop {
+    grid-template-columns: auto auto 1fr;
+  }
+}
+
+.ringStat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ring {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  flex: none;
+}
+
+.ringLabel {
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 9em;
+}
+
+.kvList {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  gap: 6px 18px;
+  font-size: 13.5px;
+  padding-left: 18px;
+  border-left: 1px solid var(--line);
+}
+
+.kvList dt {
+  color: var(--ink-2);
+}
+
+.kvList dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cells {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 18px -20px -20px;
+  border-top: 1px solid var(--line);
+}
+
+@media (min-width: 720px) {
+  .cells {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.cell {
+  padding: 12px 20px 14px;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+
+.cell:last-child {
+  border-right: 0;
+}
+
+.cellLabel {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cellValue {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* designer list */
+
+.statusDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.areas {
+  color: var(--muted);
+  font-size: 12px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tableTotal td {
+  font-weight: 600;
+  background: var(--surface-2);
+}
+
+.num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
 }

@@ -1,24 +1,27 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { StoredClassification } from "@/lib/classify/schema";
 import {
-  OUTCOME_GROUPS,
-  OUTCOME_GROUP_LABEL,
+  HANDOFF_TARGET_S,
   delta,
-  funnel,
+  designerStats,
   hourOfDay,
   outcomeGroup,
   previousRange,
+  serviceLevels,
   timeBuckets,
+  volumeSeries,
   type Delta,
 } from "@/lib/dashboard-data";
 import { demoCallbacks, demoDesigners, demoPipeline, demoRange, isDemo } from "@/lib/demo";
-import { computeMetrics, designerMap, loadCallbacks, loadPipeline, loadRange, type Stats } from "@/lib/metrics";
+import { computeMetrics, designerMap, loadCallbacks, loadPipeline, loadRange } from "@/lib/metrics";
 import { redactPrices } from "@/lib/price-guard";
 import { requireSession } from "@/lib/require-session";
 import { formatDuration, formatIst, isAfterHours, istRange, type RangeKey } from "@/lib/time";
 import { markCalledBack } from "./actions";
-import { BarList, Card, HourBars, Legend, Sparkline, SplitBar, StackedColumns, type SeriesDef } from "./charts";
+import { BarList, HourBars, Legend, Sparkline } from "./charts";
 import styles from "./dashboard.module.css";
+import { Donut, Gauge, RingStat, VolumeChart } from "./widgets";
 
 export const metadata = { title: "Dashboard · Aangan Enquiries" };
 
@@ -31,25 +34,18 @@ const RANGES: { key: RangeKey; label: string }[] = [
   { key: "month", label: "This month" },
 ];
 
-const OUTCOME_LABEL: Record<string, string> = {
-  qualified: "Qualified",
-  declined: "Declined",
-  needs_review: "Needs review",
-  existing_client: "Existing client",
-  not_a_lead: "Not a lead",
-  dropped: "Dropped",
-};
-
-const GROUP_COLOR: Record<string, string> = {
-  qualified: "var(--series-1)",
-  declined: "var(--series-2)",
-  needs_review: "var(--series-3)",
-  other: "var(--series-4)",
-};
-
-const SERIES: SeriesDef[] = OUTCOME_GROUPS.map((g) => ({ key: g, label: OUTCOME_GROUP_LABEL[g], color: GROUP_COLOR[g] }));
-
-const HANDOFF_TARGET_S = 120; // brief: designer email within two minutes of the call ending
+/** Six outcomes, six validated categorical slots (fixed order, never cycled). */
+const OUTCOMES = [
+  { key: "qualified", label: "Qualified", color: "var(--series-1)" },
+  { key: "declined", label: "Declined", color: "var(--series-2)" },
+  { key: "needs_review", label: "Needs review", color: "var(--series-3)" },
+  { key: "existing_client", label: "Existing client", color: "var(--series-4)" },
+  { key: "not_a_lead", label: "Not a lead", color: "var(--series-5)" },
+  { key: "dropped", label: "Dropped", color: "var(--series-6)" },
+] as const;
+const RECENT_ROWS = 10;
+const OUTCOME_LABEL: Record<string, string> = Object.fromEntries(OUTCOMES.map((o) => [o.key, o.label]));
+const OUTCOME_COLOR: Record<string, string> = Object.fromEntries(OUTCOMES.map((o) => [o.key, o.color]));
 
 function money(n: number | null, currency: string, digits = 2) {
   if (n == null) return "–";
@@ -72,7 +68,7 @@ function DeltaBadge({ d }: { d: Delta }) {
   );
 }
 
-function Kpi({ label, value, d, compare, sub, spark }: { label: string; value: string; d: Delta; compare: string; sub?: string; spark?: React.ReactNode }) {
+function Kpi({ label, value, d, compare, sub, spark }: { label: string; value: string; d: Delta; compare: string; sub?: string; spark?: ReactNode }) {
   return (
     <div className={styles.kpi}>
       <div className={styles.kpiLabel}>{label}</div>
@@ -87,30 +83,18 @@ function Kpi({ label, value, d, compare, sub, spark }: { label: string; value: s
   );
 }
 
-function Health({ ok, warn, title, detail }: { ok: boolean; warn?: boolean; title: string; detail: string }) {
-  const cls = ok ? styles.healthGood : warn ? styles.healthWarn : styles.healthBad;
+function Widget({ title, sub, meta, span, id, children }: { title: string; sub?: string; meta?: ReactNode; span: string; id?: string; children: ReactNode }) {
   return (
-    <div className={styles.healthItem}>
-      <span className={`${styles.healthIcon} ${cls}`} aria-hidden>
-        {ok ? "✓" : "!"}
-      </span>
-      <div className={styles.healthText}>
-        <strong>{title}</strong>
-        <span>{detail}</span>
-      </div>
-    </div>
-  );
-}
-
-function latencyStat(label: string, s: Stats, target?: number) {
-  const overTarget = target != null && s.median != null && s.median > target;
-  return (
-    <div className={styles.stat}>
-      <div className={styles.statLabel}>{label}</div>
-      <div className={`${styles.statValue} ${overTarget ? styles.alert : ""}`}>{formatDuration(s.median)}</div>
-      <div className={styles.statSub}>{s.count ? `median · slowest ${formatDuration(s.max)}` : "no data yet"}</div>
-      {target != null ? <div className={styles.statSub}>target under {formatDuration(target)}</div> : null}
-    </div>
+    <section id={id} className={`${styles.widget} ${span}`}>
+      <header className={styles.widgetHead}>
+        <div>
+          <h2 className={styles.widgetTitle}>{title}</h2>
+          {sub ? <p className={styles.widgetSub}>{sub}</p> : null}
+        </div>
+        {meta ? <div className={styles.widgetMeta}>{meta}</div> : null}
+      </header>
+      {children}
+    </section>
   );
 }
 
@@ -118,6 +102,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   await requireSession();
   const sp = await searchParams;
   const range: RangeKey = sp.range === "week" || sp.range === "month" ? sp.range : "today";
+  const rangeLabel = RANGES.find((r) => r.key === range)!.label;
   const { start, end } = istRange(range);
   const prev = previousRange(range, start, end);
 
@@ -130,206 +115,286 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const p = computeMetrics(prevData);
   const cur = m.cost.currency;
   const buckets = timeBuckets(data.calls, range, start, end);
+  const volume = volumeSeries(buckets);
   const hours = hourOfDay(data.calls);
-  const steps = funnel(data.calls, data.handoffs);
+  const levels = serviceLevels(data.calls, data.handoffs);
+  const team = designerStats([...designers.values()], data.calls, data.handoffs);
   const ackByCall = new Map(data.handoffs.map((h) => [h.call_id, h]));
   const qualified = m.outcomes.qualified ?? 0;
-  const prevQualified = p.outcomes.qualified ?? 0;
-
   const sparkTitles = buckets.map((b) => b.title);
-  const columns = buckets.map((b) => ({ key: b.key, label: b.label, title: b.title, values: b.counts, extra: b.booked ? `${b.booked} booked` : undefined }));
   const labelEvery = range === "today" ? 3 : buckets.length > 14 ? 5 : 1;
+  const now = new Date();
 
   return (
-    <main className={styles.page}>
-      {demo ? <p className={styles.demo}>Demo data: DASHBOARD_DEMO is on. Nothing here is real.</p> : null}
-
-      <header className={styles.topbar}>
-        <div>
-          <div className={styles.eyebrow}>
-            <span className={styles.liveDot} aria-hidden />
-            Live · updated {formatIst(new Date())} IST
+    <>
+      <div className={styles.appbar}>
+        <div className={styles.appbarInner}>
+          <Link href="/dashboard" className={styles.wordmark}>
+            AANGAN
+          </Link>
+          <nav className={styles.tabs} aria-label="Sections">
+            <a href="#overview" aria-current="page">
+              Overview
+            </a>
+            <a href="#designers">Designers</a>
+            <a href="#calls">Calls</a>
+            <a href="#callback">Call back</a>
+          </nav>
+          <div className={styles.appbarRight}>
+            <div>
+              <strong>{formatIst(now)}</strong>
+              India Standard Time
+            </div>
+            <span className={styles.avatar} title="Aangan Studio">
+              AS
+            </span>
           </div>
-          <h1 className={styles.h1}>Aangan enquiries</h1>
         </div>
-        <nav className={styles.toggle} aria-label="Period">
-          {RANGES.map((r) => (
-            <Link key={r.key} href={`/dashboard?range=${r.key}`} aria-current={r.key === range ? "page" : undefined}>
-              {r.label}
-            </Link>
-          ))}
-        </nav>
-      </header>
-
-      <section className={styles.kpis} aria-label="Headline numbers">
-        <Kpi
-          label="Calls answered"
-          value={String(m.total)}
-          d={delta(m.total, p.total)}
-          compare={prev.label}
-          sub={`${pct(m.afterHours, m.total)} after hours · avg ${formatDuration(m.avgDurationSeconds)}`}
-          spark={<Sparkline values={buckets.map((b) => b.total)} titles={sparkTitles} color="var(--series-1)" label="calls" />}
-        />
-        <Kpi
-          label="Qualified leads"
-          value={String(qualified)}
-          d={delta(qualified, prevQualified)}
-          compare={prev.label}
-          sub={`${pct(qualified, m.total)} of calls`}
-          spark={<Sparkline values={buckets.map((b) => b.counts.qualified)} titles={sparkTitles} color="var(--series-1)" label="qualified" />}
-        />
-        <Kpi
-          label="Consultations booked"
-          value={String(m.booked)}
-          d={delta(m.booked, p.booked)}
-          compare={prev.label}
-          sub={m.bookingFailed ? `${m.bookingFailed} booking failure${m.bookingFailed === 1 ? "" : "s"}` : "no booking failures"}
-          spark={<Sparkline values={buckets.map((b) => b.booked)} titles={sparkTitles} color="var(--series-1)" label="booked" />}
-        />
-        <Kpi
-          label="Cost per qualified lead"
-          value={money(m.cost.perQualified, cur)}
-          d={delta(m.cost.perQualified, p.cost.perQualified, false)}
-          compare={prev.label}
-          sub={`${money(m.cost.total, cur)} total · ${money(m.cost.perCall, cur)} per call`}
-        />
-      </section>
-
-      <section className={styles.health} aria-label="Health checks">
-        <Health ok={m.complianceIncidents === 0} title={m.complianceIncidents ? `${m.complianceIncidents} compliance incident${m.complianceIncidents === 1 ? "" : "s"}` : "No price quoted"} detail="agent never mentions a price" />
-        <Health ok={m.unacknowledged === 0} warn title={m.unacknowledged ? `${m.unacknowledged} lead${m.unacknowledged === 1 ? "" : "s"} not acknowledged` : "All leads acknowledged"} detail="designer tapped “I've got this”" />
-        <Health ok={m.bookingFailed === 0} warn title={m.bookingFailed ? `${m.bookingFailed} booking failure${m.bookingFailed === 1 ? "" : "s"}` : "Bookings healthy"} detail="Cal.com during the call" />
-        <Health ok={callbacks.length === 0} warn title={callbacks.length ? `${callbacks.length} dropped call${callbacks.length === 1 ? "" : "s"} to call back` : "No calls to return"} detail="last 30 days" />
-      </section>
-
-      <div className={styles.grid2}>
-        <Card title="Calls over time" subtitle={range === "today" ? "by hour, IST" : "by day, IST"}>
-          <Legend items={SERIES.map((s) => ({ color: s.color, label: s.label }))} />
-          <StackedColumns data={columns} series={SERIES} labelEvery={labelEvery} />
-        </Card>
-        <Card title="Lead funnel" subtitle="from first ring to a designer owning it">
-          <BarList items={steps.map((s) => ({ label: s.label, value: s.value, note: s.note }))} color="var(--series-1)" emptyText="No calls in this period." />
-        </Card>
       </div>
 
-      <div className={`${styles.grid2} ${styles.grid2even}`}>
-        <Card title="When people call" subtitle={`${pct(m.afterHours, m.total)} outside the 10am–7pm front desk`}>
-          <Legend
-            items={[
-              { color: "var(--series-1)", label: "Front desk hours" },
-              { color: "var(--series-2)", label: "After hours" },
-            ]}
+      <main className={styles.shell} id="overview">
+        {demo ? <p className={styles.demo}>Demo data: DASHBOARD_DEMO is on. Nothing here is real.</p> : null}
+
+        <div className={styles.pageHead}>
+          <div>
+            <h1 className={styles.pageTitle}>Enquiries dashboard</h1>
+            <p className={styles.pageSub}>Every call answered by the voice agent, qualified, booked and handed to a designer.</p>
+          </div>
+          <nav className={styles.toggle} aria-label="Period">
+            {RANGES.map((r) => (
+              <Link key={r.key} href={`/dashboard?range=${r.key}`} aria-current={r.key === range ? "page" : undefined}>
+                {r.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+
+        <section className={styles.kpis} aria-label="Headline numbers" style={{ marginBottom: 16 }}>
+          <Kpi
+            label="Calls answered"
+            value={String(m.total)}
+            d={delta(m.total, p.total)}
+            compare={prev.label}
+            spark={<Sparkline values={buckets.map((b) => b.total)} titles={sparkTitles} color="var(--series-1)" label="calls" />}
           />
-          <HourBars slots={hours} inColor="var(--series-1)" afterColor="var(--series-2)" />
-        </Card>
-        <div className={styles.stack}>
-          <Card title="Speed to lead" subtitle="a lead answered within the hour converts 4× better">
-            <div className={styles.statPair}>
-              {latencyStat("Call end → designer email", m.handoffLatency, HANDOFF_TARGET_S)}
-              {latencyStat("Email → designer acknowledged", m.ackLatency)}
-            </div>
-          </Card>
-          <Card
-            title="What it cost"
-            subtitle={`${m.cost.vaaniMinutes.toFixed(1)} call minutes · ${(m.cost.geminiTokens.input + m.cost.geminiTokens.output).toLocaleString("en-IN")} tokens · ${m.cost.emailsSent} emails`}
-          >
-            <SplitBar
-              parts={[
-                { label: "Vaani calls", value: m.cost.vaani, display: money(m.cost.vaani, cur), color: "var(--series-1)" },
-                { label: "Gemini", value: m.cost.gemini, display: money(m.cost.gemini, cur), color: "var(--series-2)" },
-                { label: "Email", value: m.cost.email, display: money(m.cost.email, cur), color: "var(--series-3)" },
+          <Kpi
+            label="Qualified leads"
+            value={String(qualified)}
+            d={delta(qualified, p.outcomes.qualified ?? 0)}
+            compare={prev.label}
+            spark={<Sparkline values={buckets.map((b) => b.counts.qualified)} titles={sparkTitles} color="var(--series-1)" label="qualified" />}
+          />
+          <Kpi
+            label="Consultations booked"
+            value={String(m.booked)}
+            d={delta(m.booked, p.booked)}
+            compare={prev.label}
+            spark={<Sparkline values={buckets.map((b) => b.booked)} titles={sparkTitles} color="var(--series-1)" label="booked" />}
+          />
+          <Kpi label="Cost per qualified lead" value={money(m.cost.perQualified, cur)} d={delta(m.cost.perQualified, p.cost.perQualified, false)} compare={prev.label} sub={`${money(m.cost.total, cur)} total`} />
+        </section>
+
+        <div className={styles.widgets}>
+          <Widget title="Call disposition" sub={`${rangeLabel} · ${pct(qualified, m.total)} qualified`} span={styles.span5}>
+            <Donut items={OUTCOMES.map((o) => ({ key: o.key, label: o.label, color: o.color, value: m.outcomes[o.key] ?? 0 }))} totalLabel="Total calls" />
+          </Widget>
+
+          <Widget title="Call volume" sub={range === "today" ? "By hour, IST" : "By day, IST"} span={styles.span7}>
+            <Legend
+              items={[
+                { color: "var(--series-1)", label: "Calls answered" },
+                { color: "var(--series-2)", label: "Qualified" },
               ]}
             />
-            {m.cost.missingRates.length ? <p className={styles.note}>Rate not set, counted as 0: {m.cost.missingRates.join(", ")}</p> : null}
-          </Card>
-        </div>
-      </div>
+            <VolumeChart data={volume} labelEvery={labelEvery} />
+          </Widget>
 
-      <div className={`${styles.grid2} ${styles.grid2even}`}>
-        <Card title="Outcomes" subtitle="what the classifier decided">
-          <BarList
-            items={Object.entries(m.outcomes)
-              .sort((a, b) => b[1] - a[1])
-              .map(([k, v]) => ({ label: OUTCOME_LABEL[k] ?? k, value: v, note: pct(v, m.total), color: GROUP_COLOR[outcomeGroup(k)] }))}
-            color="var(--series-1)"
-          />
-        </Card>
-        <Card title="Decline reasons" subtitle="why a caller wasn't a fit">
-          <BarList
-            items={Object.entries(m.declineReasons)
-              .sort((a, b) => b[1] - a[1])
-              .map(([k, v]) => ({ label: k.replace(/_/g, " "), value: v, note: pct(v, m.outcomes.declined ?? 0) }))}
-            color="var(--series-2)"
-            emptyText="No declines in this period."
-          />
-        </Card>
-      </div>
+          <Widget title="Service level" sub="Speed to lead: answered within the hour converts 4× better" span={styles.span12}>
+            <div className={styles.gauges}>
+              {levels.map((l) => (
+                <Gauge
+                  key={l.key}
+                  label={l.label}
+                  percent={l.percent}
+                  level={l.level}
+                  detail={l.detail}
+                  footnote={
+                    l.key === "handoff"
+                      ? `median ${formatDuration(m.handoffLatency.median)} · target ${formatDuration(HANDOFF_TARGET_S)}`
+                      : l.key === "ack"
+                        ? `median ${formatDuration(m.ackLatency.median)} · ${m.unacknowledged} waiting`
+                        : `${m.bookingFailed} booking failure${m.bookingFailed === 1 ? "" : "s"}`
+                  }
+                />
+              ))}
+            </div>
+          </Widget>
 
-      <div className={styles.grid2}>
-        <Card title="Recent calls" subtitle={`${data.calls.length} in this period`}>
-          {data.calls.length ? (
+          <Widget title="Enquiry status" sub={`${rangeLabel} · ${prev.label.replace("vs ", "compared ")}`} span={styles.span8} meta={m.cost.missingRates.length ? "cost rates not set" : undefined}>
+            <div className={styles.statusTop}>
+              <RingStat label="Average call length" value={formatDuration(m.avgDurationSeconds)} />
+              <RingStat label="Calls outside 10am–7pm" value={pct(m.afterHours, m.total)} />
+              <dl className={styles.kvList}>
+                <dt>Calls answered</dt>
+                <dd>{m.total}</dd>
+                <dt>Qualified</dt>
+                <dd>{qualified}</dd>
+                <dt>Asked about pricing</dt>
+                <dd>{m.pricingRequested}</dd>
+                <dt>Agent quoted a price</dt>
+                <dd className={m.complianceIncidents ? styles.alert : styles.ok}>{m.complianceIncidents ? `! ${m.complianceIncidents} incident${m.complianceIncidents === 1 ? "" : "s"}` : "✓ never"}</dd>
+              </dl>
+            </div>
+            <div className={styles.cells}>
+              <div className={styles.cell}>
+                <div className={styles.cellLabel}>Total cost</div>
+                <div className={styles.cellValue}>{money(m.cost.total, cur)}</div>
+              </div>
+              <div className={styles.cell}>
+                <div className={styles.cellLabel}>Cost per call</div>
+                <div className={styles.cellValue}>{money(m.cost.perCall, cur)}</div>
+              </div>
+              <div className={styles.cell}>
+                <div className={styles.cellLabel}>Call minutes</div>
+                <div className={styles.cellValue}>{m.cost.vaaniMinutes.toFixed(1)}</div>
+              </div>
+              <div className={styles.cell}>
+                <div className={styles.cellLabel}>Emails sent</div>
+                <div className={styles.cellValue}>{m.cost.emailsSent}</div>
+              </div>
+            </div>
+          </Widget>
+
+          <Widget title="Decline reasons" sub={`${m.outcomes.declined ?? 0} declined`} span={styles.span4}>
+            <BarList
+              items={Object.entries(m.declineReasons)
+                .sort((a, b) => b[1] - a[1])
+                .map(([k, v]) => ({ label: k.replace(/_/g, " "), value: v, note: pct(v, m.outcomes.declined ?? 0) }))}
+              color="var(--series-2)"
+              emptyText="No declines in this period."
+            />
+          </Widget>
+
+          <Widget title="When people call" sub={`${pct(m.afterHours, m.total)} outside front desk hours`} span={styles.span7}>
+            <Legend
+              items={[
+                { color: "var(--series-1)", label: "Front desk (10am–7pm)" },
+                { color: "var(--series-2)", label: "After hours" },
+              ]}
+            />
+            <HourBars slots={hours} inColor="var(--series-1)" afterColor="var(--series-2)" />
+          </Widget>
+
+          <Widget title="Pipeline" sub="HubSpot" span={styles.span5} meta={pipeline.lastSyncedAt ? `synced ${formatIst(pipeline.lastSyncedAt)}` : "not synced yet"}>
+            <div className={styles.statusTop} style={{ gridTemplateColumns: "auto auto" }}>
+              <RingStat label="Open deals" value={String(pipeline.openDeals)} />
+              <RingStat label="Won deals" value={String(pipeline.wonDeals)} tone="good" />
+            </div>
+            <p className={styles.note} style={{ marginTop: 14 }}>
+              {pipeline.wonValue == null ? "Won value appears once someone enters it on a won deal in HubSpot." : `Won value entered in HubSpot: ${money(pipeline.wonValue, cur, 0)}`}
+            </p>
+          </Widget>
+
+          <Widget title="Designer list" sub={`${team.filter((t) => t.active).length} active designers`} span={styles.span12} id="designers">
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th>Time</th>
-                    <th>Caller</th>
-                    <th>Outcome</th>
                     <th>Designer</th>
-                    <th>Ack</th>
-                    <th />
+                    <th>Status</th>
+                    <th>Areas</th>
+                    <th className={styles.num}>Leads</th>
+                    <th className={styles.num}>Booked</th>
+                    <th className={styles.num}>Acknowledged</th>
+                    <th className={styles.num}>Waiting</th>
+                    <th className={styles.num}>Median ack</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.calls.slice(0, 50).map((c) => {
-                    const h = ackByCall.get(c.id);
-                    const name = (c.classification as StoredClassification | null)?.fields?.name;
-                    const when = c.started_at ?? c.created_at;
-                    return (
-                      <tr key={c.id}>
-                        <td>
-                          {formatIst(when)}
-                          {isAfterHours(new Date(when)) ? <span className={styles.muted}> · after hours</span> : null}
-                        </td>
-                        <td>{name ? redactPrices(name) : <span className={styles.muted}>–</span>}</td>
-                        <td>
-                          <span className={styles.pill}>
-                            <span className={styles.pillDot} style={{ background: GROUP_COLOR[outcomeGroup(c.outcome)] }} />
-                            {c.outcome ? OUTCOME_LABEL[c.outcome] : c.status}
-                          </span>
-                          {c.decline_reason ? <span className={styles.muted}> {c.decline_reason.replace(/_/g, " ")}</span> : null}
-                        </td>
-                        <td>{c.designer_id ? (designers.get(c.designer_id)?.name ?? "–") : <span className={styles.muted}>–</span>}</td>
-                        <td>{h ? h.acknowledged_at ? <span className={styles.ackYes}>✓ Yes</span> : <span className={styles.ackNo}>! No</span> : <span className={styles.muted}>–</span>}</td>
-                        <td>
-                          <Link href={`/dashboard/calls/${c.id}`}>Transcript →</Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {team.map((t) => (
+                    <tr key={t.id}>
+                      <td style={{ fontWeight: 500 }}>{t.name}</td>
+                      <td>
+                        <span className={styles.statusDot} style={{ background: t.active ? "var(--good)" : "var(--axis)" }} />
+                        {t.active ? "Active" : "Inactive"}
+                      </td>
+                      <td>
+                        <div className={styles.areas} title={t.areas.join(", ")}>
+                          {t.areas.join(", ") || "–"}
+                        </div>
+                      </td>
+                      <td className={styles.num}>{t.leads}</td>
+                      <td className={styles.num}>{t.booked}</td>
+                      <td className={styles.num}>{t.acknowledged}</td>
+                      <td className={styles.num}>{t.waiting ? <span className={styles.ackNo}>{t.waiting}</span> : 0}</td>
+                      <td className={styles.num}>{formatDuration(t.medianAckSeconds)}</td>
+                    </tr>
+                  ))}
+                  <tr className={styles.tableTotal}>
+                    <td>Total</td>
+                    <td />
+                    <td />
+                    <td className={styles.num}>{team.reduce((s, t) => s + t.leads, 0)}</td>
+                    <td className={styles.num}>{team.reduce((s, t) => s + t.booked, 0)}</td>
+                    <td className={styles.num}>{team.reduce((s, t) => s + t.acknowledged, 0)}</td>
+                    <td className={styles.num}>{team.reduce((s, t) => s + t.waiting, 0)}</td>
+                    <td className={styles.num}>{formatDuration(m.ackLatency.median)}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
-          ) : (
-            <p className={styles.note}>No calls in this period yet. They appear here as soon as the phone agent goes live.</p>
-          )}
-        </Card>
-        <div className={styles.stack}>
-          <Card title="Pipeline" subtitle={pipeline.lastSyncedAt ? `HubSpot · synced ${formatIst(pipeline.lastSyncedAt)}` : "HubSpot · not synced yet"}>
-            <div className={styles.statPair}>
-              <div className={styles.stat}>
-                <div className={styles.statLabel}>Open deals</div>
-                <div className={styles.statValue}>{pipeline.openDeals}</div>
-              </div>
-              <div className={styles.stat}>
-                <div className={styles.statLabel}>Won deals</div>
-                <div className={styles.statValue}>{pipeline.wonDeals}</div>
-                <div className={styles.statSub}>{pipeline.wonValue == null ? "no value entered in HubSpot" : `${money(pipeline.wonValue, cur, 0)} entered in HubSpot`}</div>
-              </div>
-            </div>
-          </Card>
+          </Widget>
 
-          <Card title="Call back" subtitle="dropped calls with a number, last 30 days">
+          <Widget title="Recent calls" sub={`Latest ${Math.min(RECENT_ROWS, data.calls.length)} of ${data.calls.length} in ${rangeLabel.toLowerCase()}`} span={styles.span8} id="calls">
+            {data.calls.length ? (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Caller</th>
+                      <th>Outcome</th>
+                      <th>Designer</th>
+                      <th>Ack</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.calls.slice(0, RECENT_ROWS).map((c) => {
+                      const h = ackByCall.get(c.id);
+                      const name = (c.classification as StoredClassification | null)?.fields?.name;
+                      const when = c.started_at ?? c.created_at;
+                      return (
+                        <tr key={c.id}>
+                          <td>
+                            {formatIst(when)}
+                            {isAfterHours(new Date(when)) ? <span className={styles.muted}> · after hours</span> : null}
+                          </td>
+                          <td>{name ? redactPrices(name) : <span className={styles.muted}>–</span>}</td>
+                          <td>
+                            <span className={styles.pill}>
+                              <span className={styles.pillDot} style={{ background: c.outcome ? OUTCOME_COLOR[c.outcome] : "var(--axis)" }} />
+                              {c.outcome ? OUTCOME_LABEL[c.outcome] : c.status}
+                            </span>
+                            {c.decline_reason ? <span className={styles.muted}> {c.decline_reason.replace(/_/g, " ")}</span> : null}
+                          </td>
+                          <td>{c.designer_id ? (designers.get(c.designer_id)?.name ?? "–") : <span className={styles.muted}>–</span>}</td>
+                          <td>{h ? h.acknowledged_at ? <span className={styles.ackYes}>✓ Yes</span> : <span className={styles.ackNo}>! No</span> : <span className={styles.muted}>–</span>}</td>
+                          <td>
+                            <Link href={`/dashboard/calls/${c.id}`}>Transcript →</Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className={styles.note}>No calls in this period yet. They appear here as soon as the phone agent goes live.</p>
+            )}
+          </Widget>
+
+          <Widget title="Call back" sub="Dropped calls with a number, last 30 days" span={styles.span4} id="callback">
             {callbacks.length ? (
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
@@ -356,9 +421,9 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             ) : (
               <p className={styles.note}>None waiting.</p>
             )}
-          </Card>
+          </Widget>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }
