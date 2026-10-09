@@ -4,10 +4,14 @@ import { redactPrices } from "@/lib/price-guard";
 import { requireSession } from "@/lib/require-session";
 import { formatDuration, formatIst, istRange, isAfterHours, type RangeKey } from "@/lib/time";
 import type { StoredClassification } from "@/lib/classify/schema";
+import { demoCallbacks, demoDesigners, demoPipeline, demoRange, isDemo } from "@/lib/demo";
 import { markCalledBack } from "./actions";
 import styles from "./dashboard.module.css";
 
 export const metadata = { title: "Dashboard · Aangan Enquiries" };
+
+// Private, always-fresh data behind a password: a blocking render is intended.
+export const instant = false;
 
 const RANGES: { key: RangeKey; label: string }[] = [
   { key: "today", label: "Today" },
@@ -70,13 +74,17 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const range: RangeKey = sp.range === "week" || sp.range === "month" ? sp.range : "today";
   const { start, end } = istRange(range);
 
-  const [data, pipeline, callbacks, designers] = await Promise.all([loadRange(start, end), loadPipeline(), loadCallbacks(), designerMap()]);
+  const demo = isDemo();
+  const [data, pipeline, callbacks, designers] = demo
+    ? [demoRange(start, end), demoPipeline(), demoCallbacks(), demoDesigners()]
+    : await Promise.all([loadRange(start, end), loadPipeline(), loadCallbacks(), designerMap()]);
   const m = computeMetrics(data);
   const ackByCall = new Map(data.handoffs.map((h) => [h.call_id, h]));
   const cur = m.cost.currency;
 
   return (
     <main className={styles.page}>
+      {demo ? <p className={styles.demo}>Demo data: DASHBOARD_DEMO is on. Nothing here is real.</p> : null}
       <header className={styles.header}>
         <h1 className={styles.h1}>Aangan enquiries</h1>
         <nav className={styles.toggle} aria-label="Period">

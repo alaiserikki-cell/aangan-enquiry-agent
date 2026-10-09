@@ -274,3 +274,20 @@
   font-size: 14px;
   text-decoration: none;
 }
+
+.demo {
+  background: var(--pill);
+  border: 1px dashed var(--brand);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.kv > div:nth-child(odd) {
+  overflow-wrap: normal;
+}
+
+.kv a {
+  color: var(--brand);
+}

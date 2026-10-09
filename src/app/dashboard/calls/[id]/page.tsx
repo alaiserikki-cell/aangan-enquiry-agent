@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { StoredClassification } from "@/lib/classify/schema";
 import { db, must } from "@/lib/db";
+import { demoCall, demoDesigners, demoHandoff, isDemo } from "@/lib/demo";
 import { getDesigner } from "@/lib/designers";
 import { redactPrices } from "@/lib/price-guard";
 import { requireSession } from "@/lib/require-session";
@@ -11,18 +12,24 @@ import styles from "../../dashboard.module.css";
 
 export const metadata = { title: "Call · Aangan Enquiries" };
 
+// Private, always-fresh data behind a password: a blocking render is intended.
+export const instant = false;
+
 export default async function CallPage({ params }: PageProps<"/dashboard/calls/[id]">) {
   await requireSession();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
-  const call = must(await db().from("calls").select("*").eq("id", id).maybeSingle(), "call") as CallRow | null;
+  const demo = isDemo();
+  const call = demo ? demoCall(id) : (must(await db().from("calls").select("*").eq("id", id).maybeSingle(), "call") as CallRow | null);
   if (!call) notFound();
-  const [designer, handoff, incidents] = await Promise.all([
-    call.designer_id ? getDesigner(call.designer_id) : null,
-    db().from("handoffs").select("email_sent_at, acknowledged_at, escalated_at").eq("call_id", id).maybeSingle(),
-    db().from("incidents").select("type, created_at").eq("call_id", id),
-  ]);
+  const [designer, handoff, incidents] = demo
+    ? [call.designer_id ? demoDesigners().get(call.designer_id) ?? null : null, { data: demoHandoff(id) }, { data: [] as { type: string }[] }]
+    : await Promise.all([
+        call.designer_id ? getDesigner(call.designer_id) : null,
+        db().from("handoffs").select("email_sent_at, acknowledged_at, escalated_at").eq("call_id", id).maybeSingle(),
+        db().from("incidents").select("type, created_at").eq("call_id", id),
+      ]);
   const c = call.classification as StoredClassification | null;
   const h = handoff.data as { email_sent_at: string | null; acknowledged_at: string | null; escalated_at: string | null } | null;
   const r = (s: string | null | undefined) => (s ? redactPrices(s) : "–");
@@ -59,6 +66,7 @@ export default async function CallPage({ params }: PageProps<"/dashboard/calls/[
 
   return (
     <main className={styles.page}>
+      {demo ? <p className={styles.demo}>Demo data: DASHBOARD_DEMO is on. Nothing here is real.</p> : null}
       <Link href="/dashboard" className={styles.back}>
         ← Dashboard
       </Link>
