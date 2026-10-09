@@ -5,6 +5,7 @@ import type { StoredClassification } from "../classify/schema";
 
 export type Action =
   | { type: "compliance_incident" }
+  | { type: "policy_incident"; violations: string[] }
   | { type: "hubspot_deal" }
   | { type: "designer_handoff"; pendingReview: boolean }
   | { type: "urgent_existing_client" }
@@ -21,6 +22,7 @@ export function planActions({ c, bookingStatus, callerPhone }: PlanInput): Actio
   const actions: Action[] = [];
 
   if (c.price_mentioned_by_agent) actions.push({ type: "compliance_incident" });
+  if (c.agent_violations?.length) actions.push({ type: "policy_incident", violations: c.agent_violations });
 
   switch (c.outcome) {
     case "qualified":

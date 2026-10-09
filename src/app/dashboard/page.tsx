@@ -15,7 +15,7 @@ import {
 } from "@/lib/dashboard-data";
 import { demoCallbacks, demoDesigners, demoPipeline, demoRange, isDemo } from "@/lib/demo";
 import { computeMetrics, designerMap, loadCallbacks, loadPipeline, loadRange } from "@/lib/metrics";
-import { redactPrices } from "@/lib/price-guard";
+import { redactForDisplay } from "@/lib/price-guard";
 import { requireSession } from "@/lib/require-session";
 import { formatDuration, formatIst, isAfterHours, istRange, type RangeKey } from "@/lib/time";
 import { markCalledBack } from "./actions";
@@ -243,6 +243,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                 <dd>{m.pricingRequested}</dd>
                 <dt>Agent quoted a price</dt>
                 <dd className={m.complianceIncidents ? styles.alert : styles.ok}>{m.complianceIncidents ? `! ${m.complianceIncidents} incident${m.complianceIncidents === 1 ? "" : "s"}` : "✓ never"}</dd>
+                <dt>Other agent rule breaks</dt>
+                <dd className={m.policyIncidents ? styles.alert : styles.ok}>{m.policyIncidents ? `! ${m.policyIncidents} call${m.policyIncidents === 1 ? "" : "s"}` : "✓ none"}</dd>
               </dl>
             </div>
             <div className={styles.cells}>
@@ -370,7 +372,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                             {formatIst(when)}
                             {isAfterHours(new Date(when)) ? <span className={styles.muted}> · after hours</span> : null}
                           </td>
-                          <td>{name ? redactPrices(name) : <span className={styles.muted}>–</span>}</td>
+                          <td>{name ? redactForDisplay(name) : <span className={styles.muted}>–</span>}</td>
                           <td>
                             <span className={styles.pill}>
                               <span className={styles.pillDot} style={{ background: c.outcome ? OUTCOME_COLOR[c.outcome] : "var(--axis)" }} />

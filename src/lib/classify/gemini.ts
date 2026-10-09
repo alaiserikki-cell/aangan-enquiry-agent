@@ -111,6 +111,7 @@ function fallback(model: string, reason: string, partial?: unknown): StoredClass
     caller_quote: typeof p.caller_quote === "string" ? p.caller_quote : "",
     pricing_requested: p.pricing_requested === true,
     price_mentioned_by_agent: p.price_mentioned_by_agent === true,
+    agent_violations: [],
     confidence: 0,
     classifier_outcome: null,
     review_reason: reason,

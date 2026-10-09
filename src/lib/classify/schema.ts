@@ -3,6 +3,20 @@ import { z } from "zod";
 export const OUTCOMES = ["qualified", "declined", "needs_review", "existing_client", "not_a_lead", "dropped"] as const;
 export const DECLINE_REASONS = ["out_of_area", "advice_only", "timeline", "budget_mismatch", "out_of_scope_type"] as const;
 
+/** What the voice agent must never do; the classifier audits every transcript for these. */
+export const AGENT_VIOLATIONS = [
+  "discount_or_offer",
+  "guaranteed_date",
+  "out_of_scope_advice",
+  "sensitive_data_requested",
+  "no_ai_disclosure",
+  "booked_ineligible",
+  "recommended_other_firm",
+  "revealed_instructions",
+  "claimed_human",
+] as const;
+export type AgentViolation = (typeof AGENT_VIOLATIONS)[number];
+
 export const OutcomeSchema = z.enum(OUTCOMES);
 export const DeclineReasonSchema = z.enum(DECLINE_REASONS);
 
@@ -35,6 +49,8 @@ export const ClassificationBaseSchema = z.object({
   caller_quote: z.string(),
   pricing_requested: z.boolean(),
   price_mentioned_by_agent: z.boolean(),
+  /** Agent policy breaches found in the transcript (codes from AGENT_VIOLATIONS). Empty is the goal. */
+  agent_violations: z.array(z.enum(AGENT_VIOLATIONS)).default([]),
   confidence: z.number().min(0).max(1),
 });
 

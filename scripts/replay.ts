@@ -15,8 +15,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIDENCE_THRESHOLD, classifyTranscript, gateClassification, geminiModel } from "../src/lib/classify/gemini";
 import { EMPTY_FIELDS, type StoredClassification } from "../src/lib/classify/schema";
-import { complianceEmail, existingClientEmail, handoffEmail, needsReviewEmail } from "../src/lib/email/templates";
-import { assertNoPriceFigures, findPriceFigures } from "../src/lib/price-guard";
+import { complianceEmail, existingClientEmail, formatPhone, handoffEmail, needsReviewEmail } from "../src/lib/email/templates";
+import { assertSafeToSend, findPriceFigures, findSensitiveIds } from "../src/lib/price-guard";
 import { dealDescription } from "../src/lib/route/process-call";
 import { planActions, type Action } from "../src/lib/route/plan";
 import type { TranscriptTurn } from "../src/lib/types";
@@ -81,6 +81,7 @@ function stubClassification(c: Case): StoredClassification {
     caller_quote: c.summary,
     pricing_requested: c.pricing_requested,
     price_mentioned_by_agent: false,
+    agent_violations: [],
     confidence: 0.95,
     classifier_outcome: null,
     review_reason: c.outcome === "needs_review" ? "stub" : null,
@@ -114,7 +115,7 @@ function renderAndGuard(actions: Action[], c: StoredClassification, booked: bool
   for (const r of rendered) {
     let hits: string[] = [];
     try {
-      assertNoPriceFigures(r.text, r.name);
+      assertSafeToSend(r.text, r.name);
     } catch {
       hits = findPriceFigures(r.text.replaceAll("[amount withheld]", ""));
     }
@@ -142,6 +143,16 @@ function selfTests() {
   for (const s of ["1,400 sq ft 3BHK", "Sat 10 Oct, 11:00 am", "+91 98220 12345", "done by March 2027"]) {
     check(`guard allows "${s}"`, findPriceFigures(s).length === 0, "");
   }
+  for (const s of ["my aadhaar is 2345 6789 0123", "PAN ABCDE1234F", "card 4111 1111 1111 1111"]) {
+    check(`ID guard catches "${s}"`, findSensitiveIds(s).length > 0, "");
+  }
+  for (const s of ["+91 98220 12345", "+919822012345", "call 9822012345", "1,400 sq ft, 3BHK, March 2027"]) {
+    check(`ID guard allows "${s}"`, findSensitiveIds(s).length === 0, findSensitiveIds(s).join(","));
+  }
+  check("12-digit phone formatted safely", findSensitiveIds(formatPhone("919822012345")).length === 0, formatPhone("919822012345"));
+  const policyCase = stubClassification({ id: "Y", summary: "y", callDate: "", booked: false, outcome: "declined", decline_reason: "out_of_area", pricing_requested: false, flags: [] });
+  policyCase.agent_violations = ["guaranteed_date"];
+  check("agent policy breach → policy incident", planActions({ c: policyCase, bookingStatus: "none", callerPhone: null }).some((a) => a.type === "policy_incident"), "");
   const priceCase = stubClassification({ id: "X", summary: "x", callDate: "", booked: true, outcome: "qualified", decline_reason: null, pricing_requested: true, flags: [] });
   priceCase.price_mentioned_by_agent = true;
   check("agent price mention → compliance incident", planActions({ c: priceCase, bookingStatus: "booked", callerPhone: null })[0]?.type === "compliance_incident", "");
@@ -181,6 +192,8 @@ async function main() {
     check("decline_reason", c.decline_reason === tc.decline_reason, `expected ${tc.decline_reason}, got ${c.decline_reason}`);
     check("pricing_requested", c.pricing_requested === tc.pricing_requested, `expected ${tc.pricing_requested}, got ${c.pricing_requested}`);
     check("price_mentioned_by_agent is false", c.price_mentioned_by_agent === false, c.price_mentioned_by_agent ? "got true (COMPLIANCE FAILURE)" : "got false");
+
+    check("no agent policy violations", c.agent_violations.length === 0, c.agent_violations.length ? `got ${c.agent_violations.join(", ")} (AGENT POLICY FAILURE)` : "none");
 
     // Flags are free text: shown side by side, not failed on.
     console.log(`  ${DIM}flags expected: ${JSON.stringify(tc.flags)}${RESET}`);

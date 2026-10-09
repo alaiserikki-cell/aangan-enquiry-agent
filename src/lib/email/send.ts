@@ -2,7 +2,7 @@ import { Resend } from "resend";
 import { sql, sqlOne } from "../db";
 import { env, envOptional } from "../env";
 import { log } from "../log";
-import { assertNoPriceFigures } from "../price-guard";
+import { assertSafeToSend } from "../price-guard";
 
 export interface OutgoingEmail {
   kind: string;
@@ -27,7 +27,7 @@ export function emailTestMode(): boolean {
  * Returns false if it was already sent.
  */
 export async function sendEmail(email: OutgoingEmail): Promise<boolean> {
-  assertNoPriceFigures(`${email.subject}\n${email.html}\n${email.text}`, `${email.kind} email`);
+  assertSafeToSend(`${email.subject}\n${email.html}\n${email.text}`, `${email.kind} email`);
 
   const existing = await sqlOne<{ id: string; sent_at: string | null }>`select id, sent_at from emails where dedupe_key = ${email.dedupeKey}`;
   if (existing?.sent_at) return false;

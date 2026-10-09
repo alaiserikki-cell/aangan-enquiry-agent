@@ -9,6 +9,7 @@ import { formatIstSpoken } from "./time";
 import type { Designer, NormalizedToolCall } from "./types";
 
 export const TOOL_DEADLINE_MS = 1800;
+const MAX_BOOKING_AHEAD_MS = 8 * 864e5; // the 7-day offer window plus a day of slack
 export const FALLBACK_MESSAGE = "A designer will call you within two hours to fix a time.";
 
 export interface ToolResult {
@@ -49,17 +50,19 @@ async function withDeadline(tool: NormalizedToolCall, name: string, work: (deadl
 const remaining = (deadline: number) => Math.max(300, deadline - Date.now() - 150);
 
 /** Create the call row on the first tool call so the booking can be attached before the webhook arrives. */
-async function ensureCallRow(tool: NormalizedToolCall): Promise<{ id: string; designer_id: string | null } | null> {
+type ToolCallRow = { id: string; designer_id: string | null; booking_status: string; booking_start: string | null };
+
+async function ensureCallRow(tool: NormalizedToolCall): Promise<ToolCallRow | null> {
   if (!tool.externalCallId) {
     log.warn("tool.no_call_id");
     return null;
   }
   // Insert-or-fetch in one round trip; the no-op update makes RETURNING yield the existing row.
-  return sqlOne<{ id: string; designer_id: string | null }>`
+  return sqlOne<ToolCallRow>`
     insert into calls (provider, channel, external_id, status, caller_phone)
     values ('vaani', 'phone', ${tool.externalCallId}, 'in_call', ${tool.callerPhone})
     on conflict (provider, external_id) do update set provider = excluded.provider
-    returning id, designer_id`;
+    returning id, designer_id, booking_status, booking_start`;
 }
 
 async function markBookingFailed(tool: NormalizedToolCall): Promise<void> {
@@ -106,16 +109,30 @@ export function checkAvailability(tool: NormalizedToolCall): Promise<ToolResult>
 /** POST /api/tools/book: books the chosen slot on the assigned designer's calendar. */
 export function bookConsultation(tool: NormalizedToolCall): Promise<ToolResult> {
   return withDeadline(tool, "book", async (deadline) => {
+    // Guardrail: one booking per call. A repeated book request reads the existing booking back.
+    const existing = await ensureCallRow(tool);
+    if (existing?.booking_status === "booked" && existing.booking_start) {
+      const booked = existing.designer_id ? await getDesigner(existing.designer_id) : null;
+      const spoken = formatIstSpoken(existing.booking_start);
+      return {
+        ok: true,
+        message: `You're already booked for ${spoken}${booked ? `, with ${booked.name}` : ""}. I haven't made a second booking.`,
+        booking: { start: existing.booking_start, spoken, designer: booked?.name ?? "" },
+      };
+    }
+
+    // Guardrail: only a real future slot inside the window check_availability offers.
     const slot = str(tool.args.slot) ?? str(tool.args.start);
     const start = slot ? new Date(slot) : null;
-    if (!start || Number.isNaN(start.getTime()) || start.getTime() < Date.now()) throw new Error("Invalid or past slot");
+    if (!start || Number.isNaN(start.getTime())) throw new Error("Invalid slot");
+    if (start.getTime() < Date.now() || start.getTime() > Date.now() + MAX_BOOKING_AHEAD_MS) throw new Error("Slot outside the bookable window");
 
     const name = str(tool.args.caller_name) ?? str(tool.args.name) ?? "Aangan caller";
     const location = str(tool.args.location);
     const consultationMode = mode(tool.args.consultation_mode);
     const phone = str(tool.args.phone) ?? tool.callerPhone;
 
-    const call = await ensureCallRow(tool);
+    const call = existing;
     const designer = await designerFor(call, location);
 
     const booking = await createBooking(

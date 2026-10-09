@@ -68,7 +68,7 @@ Verify your sending domain, create an API key → `RESEND_API_KEY`, and set `RES
 ### 6. Vaani
 *Pending API docs.* Once the adapter is written:
 - Inbound number → agent: _TBD from docs_.
-- Paste the system prompt from `vaani-agent-prompt.md` into the agent.
+- Paste the hardened system prompt from `agent/vaani-system-prompt.md` into the agent. Apply the platform settings and run the red-team test script in `agent/README.md` before go-live and after every prompt change.
 - Tools:
   - `check_availability` → `POST <APP_URL>/api/tools/availability`. Args: `location` (string), `consultation_mode` (`home` | `studio`).
   - `book_consultation` → `POST <APP_URL>/api/tools/book`. Args: `slot` (ISO start time returned by check_availability), `caller_name`, `phone`, `location`, `consultation_mode`.

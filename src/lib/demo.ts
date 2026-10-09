@@ -77,6 +77,7 @@ function build(): { calls: CallRow[]; handoffs: HandoffRow[] } {
       caller_quote: s.quote,
       pricing_requested: !!s.pricing,
       price_mentioned_by_agent: false,
+      agent_violations: [],
       confidence: s.outcome === "needs_review" ? 0.62 : 0.9,
       classifier_outcome: null,
       review_reason: s.outcome === "needs_review" ? "Very small commercial space; confirm fit" : null,

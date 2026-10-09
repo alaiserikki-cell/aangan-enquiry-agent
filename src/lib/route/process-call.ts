@@ -8,12 +8,12 @@ import { classifyTranscript } from "../classify/gemini";
 import type { StoredClassification } from "../classify/schema";
 import { json, sql, sqlOne } from "../db";
 import { getDesigner, markAssigned, pickDesigner } from "../designers";
-import { complianceEmail, existingClientEmail, handoffEmail, needsReviewEmail } from "../email/templates";
+import { complianceEmail, existingClientEmail, handoffEmail, needsReviewEmail, policyEmail } from "../email/templates";
 import { sendEmail } from "../email/send";
 import { appUrl, env } from "../env";
 import { createDeal, upsertContact } from "../hubspot";
 import { log } from "../log";
-import { PriceFigureError, redactPrices } from "../price-guard";
+import { BlockedContentError, redactForDisplay } from "../price-guard";
 import { formatIst, istDateKey } from "../time";
 import { transcriptToText, type CallRow } from "../types";
 import { planActions, type Action } from "./plan";
@@ -38,7 +38,7 @@ export async function processCall(callId: string): Promise<void> {
       try {
         await runAction(action, claimed, c);
       } catch (err) {
-        if (err instanceof PriceFigureError) await recordIncident(claimed.id, "price_guard_blocked", { where: err.where, count: err.hits.length });
+        if (err instanceof BlockedContentError) await recordIncident(claimed.id, "price_guard_blocked", { where: err.where, count: err.hits.length });
         errors.push(`${action.type}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
@@ -76,6 +76,8 @@ async function runAction(action: Action, call: CallRow, c: StoredClassification)
   switch (action.type) {
     case "compliance_incident":
       return complianceIncident(call);
+    case "policy_incident":
+      return policyIncident(call, action.violations);
     case "hubspot_deal":
       return hubspotDeal(call, c);
     case "designer_handoff":
@@ -117,6 +119,18 @@ async function complianceIncident(call: CallRow): Promise<void> {
     ...complianceEmail({ callId: call.id, transcriptUrl: transcriptUrl(call.id), endedAt: call.ended_at }),
   });
   await sql`update incidents set notified_at = now() where call_id = ${call.id} and type = 'price_mentioned_by_agent'`;
+}
+
+async function policyIncident(call: CallRow, violations: string[]): Promise<void> {
+  await recordIncident(call.id, "agent_policy_violation", { violations });
+  await sendEmail({
+    kind: "policy",
+    dedupeKey: `${call.id}:policy`,
+    callId: call.id,
+    to: [env("NIKHIL_EMAIL")],
+    ...policyEmail({ violations, transcriptUrl: transcriptUrl(call.id), endedAt: call.ended_at }),
+  });
+  await sql`update incidents set notified_at = now() where call_id = ${call.id} and type = 'agent_policy_violation'`;
 }
 
 async function resolveDesigner(call: CallRow, c: StoredClassification) {
@@ -178,7 +192,7 @@ export function dealDescription(c: StoredClassification, bookingStart: string | 
     `Source: ${f.source ?? "-"}`,
     c.flags.length ? `Flags: ${c.flags.join("; ")}` : "",
   ];
-  return redactPrices(lines.filter(Boolean).join("\n"));
+  return redactForDisplay(lines.filter(Boolean).join("\n"));
 }
 
 async function hubspotDeal(call: CallRow, c: StoredClassification): Promise<void> {
@@ -187,7 +201,7 @@ async function hubspotDeal(call: CallRow, c: StoredClassification): Promise<void
 
   const designer = await resolveDesigner(call, c);
   const contactId = await upsertContact({ name: c.fields.name, phone: c.fields.phone || call.caller_phone, location: c.fields.location });
-  const dealName = redactPrices(`${c.fields.name ?? "Unknown"}, ${c.fields.property_type ?? "project"} in ${c.fields.location ?? "Pune"}`);
+  const dealName = redactForDisplay(`${c.fields.name ?? "Unknown"}, ${c.fields.property_type ?? "project"} in ${c.fields.location ?? "Pune"}`);
   const deal = await createDeal({ name: dealName, description: dealDescription(c, call.booking_start, designer.name), contactId, consultationAt: call.booking_start });
 
   await sql`

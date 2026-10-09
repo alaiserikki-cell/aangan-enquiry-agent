@@ -44,6 +44,8 @@ export interface Metrics {
   unacknowledged: number;
   pricingRequested: number;
   complianceIncidents: number;
+  /** Calls where the post-call audit found the agent breaking a rule other than pricing. */
+  policyIncidents: number;
   cost: {
     vaani: number;
     gemini: number;
@@ -139,6 +141,7 @@ export function computeMetrics(d: RangeData): Metrics {
     unacknowledged: handoffs.filter((h) => h.email_sent_at && !h.acknowledged_at).length,
     pricingRequested: calls.filter((c) => (c.classification as StoredClassification | null)?.pricing_requested).length,
     complianceIncidents: d.incidents.filter((i) => i.type === "price_mentioned_by_agent").length,
+    policyIncidents: d.incidents.filter((i) => i.type === "agent_policy_violation").length,
     cost: {
       vaani,
       gemini,

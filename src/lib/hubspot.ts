@@ -1,7 +1,7 @@
 // HubSpot CRM (free tier) via the v3 REST API. Contacts + deals only; never sets a deal amount.
 
 import { env, envOptional } from "./env";
-import { assertNoPriceFigures } from "./price-guard";
+import { assertSafeToSend } from "./price-guard";
 
 const BASE = "https://api.hubapi.com";
 const DEAL_TO_CONTACT_ASSOCIATION = 3; // HubSpot-defined association type: deal → contact
@@ -48,7 +48,7 @@ export function stageConsultationBooked(): string {
 
 /** Deal in the "Consultation booked" stage. No amount, ever. */
 export async function createDeal(d: { name: string; description: string; contactId: string; consultationAt: string | null }): Promise<{ id: string; stage: string }> {
-  assertNoPriceFigures(`${d.name}\n${d.description}`, "HubSpot deal");
+  assertSafeToSend(`${d.name}\n${d.description}`, "HubSpot deal");
   const stage = stageConsultationBooked();
   const properties: Record<string, string> = {
     dealname: d.name,

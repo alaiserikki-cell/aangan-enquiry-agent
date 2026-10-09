@@ -4,7 +4,7 @@ import type { StoredClassification } from "@/lib/classify/schema";
 import { sql, sqlOne } from "@/lib/db";
 import { demoCall, demoDesigners, demoHandoff, isDemo } from "@/lib/demo";
 import { getDesigner } from "@/lib/designers";
-import { redactPrices } from "@/lib/price-guard";
+import { redactForDisplay } from "@/lib/price-guard";
 import { requireSession } from "@/lib/require-session";
 import { formatDuration, formatIst } from "@/lib/time";
 import type { CallRow } from "@/lib/types";
@@ -32,7 +32,7 @@ export default async function CallPage({ params }: PageProps<"/dashboard/calls/[
         sql<{ type: string }>`select type from incidents where call_id = ${id}`,
       ]);
   const c = call.classification as StoredClassification | null;
-  const r = (s: string | null | undefined) => (s ? redactPrices(s) : "–");
+  const r = (s: string | null | undefined) => (s ? redactForDisplay(s) : "–");
 
   const rows: [string, React.ReactNode][] = [
     ["When", formatIst(call.started_at ?? call.created_at, { withYear: true })],
@@ -60,6 +60,7 @@ export default async function CallPage({ params }: PageProps<"/dashboard/calls/[
       ["Source", r(f.source)],
       ["Asked about pricing", c.pricing_requested ? "Yes" : "No"],
       ["Agent mentioned a price", c.price_mentioned_by_agent ? "YES (compliance incident)" : "No"],
+      ["Agent rule breaks", c.agent_violations?.length ? c.agent_violations.map((v) => v.replace(/_/g, " ")).join(", ") : "None"],
       ["Flags", c.flags.length ? c.flags.map(r).join(" · ") : "–"],
     );
   }
@@ -88,7 +89,7 @@ export default async function CallPage({ params }: PageProps<"/dashboard/calls/[
         {(call.transcript ?? []).length ? (
           call.transcript!.map((t, i) => (
             <div key={i} className={`${styles.turn} ${t.role === "agent" ? styles.agent : styles.caller}`}>
-              {redactPrices(t.text)}
+              {redactForDisplay(t.text)}
             </div>
           ))
         ) : (

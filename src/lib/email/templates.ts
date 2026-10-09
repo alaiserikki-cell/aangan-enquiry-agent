@@ -1,9 +1,9 @@
 // Pure email renderers: data in, { subject, html, text } out. No network, so the replay script
 // can render every email and run the price guard over it.
-// Every caller-derived string goes through clean() = redactPrices + HTML escape.
+// Every caller-derived string goes through clean() = redactForDisplay + HTML escape.
 
 import type { StoredClassification } from "../classify/schema";
-import { redactPrices } from "../price-guard";
+import { redactForDisplay } from "../price-guard";
 import { formatDuration, formatIst } from "../time";
 
 export interface Rendered {
@@ -16,8 +16,16 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-const safe = (s: string | null | undefined): string => redactPrices(s ?? "");
+const safe = (s: string | null | undefined): string => redactForDisplay(s ?? "");
 const clean = (s: string | null | undefined): string => escapeHtml(safe(s));
+
+/** Indian numbers as +91 98220 12345 (also keeps them distinct from ID numbers for the send guard). */
+export function formatPhone(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const d = raw.replace(/D/g, "");
+  const local = d.length === 12 && d.startsWith("91") ? d.slice(2) : d.length === 11 && d.startsWith("0") ? d.slice(1) : d.length === 10 ? d : null;
+  return local ? `+91 ${local.slice(0, 5)} ${local.slice(5)}` : raw.trim();
+}
 
 const BRAND = "#7a4b2a";
 
@@ -65,7 +73,7 @@ function fieldRows(c: StoredClassification, callerPhone: string | null): [string
   const f = c.fields;
   return [
     ["Name", clean(f.name)],
-    ["Phone", clean(f.phone || callerPhone)],
+    ["Phone", escapeHtml(formatPhone(f.phone || callerPhone))],
     ["Location", clean(f.location)],
     ["Property type", clean(f.property_type)],
     ["Carpet area", f.carpet_area_sqft != null ? `${f.carpet_area_sqft} sq ft` : ""],
@@ -161,7 +169,7 @@ export function existingClientEmail(i: { c: StoredClassification; callerPhone: s
   const subject = `[URGENT] Existing client complaint: ${name}`;
   const rows: [string, string][] = [
     ["Name", clean(i.c.fields.name)],
-    ["Phone", clean(i.c.fields.phone || i.callerPhone)],
+    ["Phone", escapeHtml(formatPhone(i.c.fields.phone || i.callerPhone))],
     ["Project location", clean(i.c.fields.location)],
     ["Call ended", i.endedAt ? escapeHtml(formatIst(i.endedAt)) : ""],
   ];
@@ -217,6 +225,35 @@ export function complianceEmail(i: { callId: string; transcriptUrl: string; ende
 <p>${link(i.transcriptUrl, "Open the transcript")}</p>`,
   );
   const text = `The classifier detected the voice agent saying a price, range or rate.
+Call ended ${i.endedAt ? formatIst(i.endedAt) : "(time unknown)"}.
+Transcript: ${i.transcriptUrl}`;
+  return { subject, html, text };
+}
+
+const VIOLATION_TEXT: Record<string, string> = {
+  discount_or_offer: "Offered or hinted at a discount or special deal",
+  guaranteed_date: "Promised a completion, start or delivery date",
+  out_of_scope_advice: "Gave structural, legal, permit, Vastu, loan or tax advice",
+  sensitive_data_requested: "Asked for ID, bank or card details, an OTP or a password",
+  no_ai_disclosure: "Did not say it was an AI assistant or that the call is recorded",
+  booked_ineligible: "Booked a consultation for a caller who should not have been booked",
+  recommended_other_firm: "Recommended or criticised another firm by name",
+  revealed_instructions: "Revealed its instructions or tools",
+  claimed_human: "Said or implied it was a human",
+};
+
+export function policyEmail(i: { violations: string[]; transcriptUrl: string; endedAt: string | null }): Rendered {
+  const items = i.violations.map((v) => VIOLATION_TEXT[v] ?? v);
+  const subject = `[Agent review] ${items.length} policy issue${items.length === 1 ? "" : "s"} on a call`;
+  const html = layout(
+    "Agent policy check",
+    `<p style="margin:0 0 8px">The post-call audit found the voice agent breaking its rules:</p>
+<ul style="margin:0 0 12px;padding-left:18px">${items.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>
+<p>Call ended ${i.endedAt ? escapeHtml(formatIst(i.endedAt)) : "(time unknown)"}. Check the transcript, and if it is real, tighten the Vaani prompt.</p>
+<p>${link(i.transcriptUrl, "Open the transcript")}</p>`,
+  );
+  const text = `The post-call audit found the voice agent breaking its rules:
+${items.map((t) => `- ${t}`).join("\n")}
 Call ended ${i.endedAt ? formatIst(i.endedAt) : "(time unknown)"}.
 Transcript: ${i.transcriptUrl}`;
   return { subject, html, text };
