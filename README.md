@@ -2,16 +2,16 @@
 
 Every phone enquiry goes to a voice agent (Vaani Labs) at any hour. The agent qualifies the caller against Nikhil's rules and books a consultation on the call (Cal.com). After the call, Gemini Flash classifies the transcript. Qualified leads become HubSpot deals, and the designer gets a brief by email (Resend) within two minutes. Nikhil follows it all on a mobile dashboard.
 
-Next.js 16 (App Router, TypeScript) on Vercel · Supabase · HubSpot free CRM · Resend · Cal.com · Gemini.
+Next.js 16 (App Router, TypeScript) on Vercel · Neon Postgres · HubSpot free CRM · Resend · Cal.com · Gemini.
 
 ## Status
 
 | Part | State |
 |---|---|
-| Database schema + seed | ✅ `supabase/migrations/0001_init.sql`, `supabase/seed.sql` |
+| Database schema + seed | ✅ `db/0001_init.sql`, `db/seed.sql` (every app query checked against real Postgres) |
 | Replay test | ✅ `npm run replay -- --stub` passes. Real-Gemini run needs the 12 transcripts in `tests/fixtures/transcripts/` |
 | Classification (Gemini) | ✅ written, not yet run against real transcripts |
-| Routing + emails | ✅ written, not yet run against live Supabase/Resend |
+| Routing + emails | ✅ written, not yet run against live Neon/Resend |
 | Cal.com tools | ✅ written against Cal.com API v2, not yet run live |
 | **Vaani adapter** | ⏳ **stub**: `src/lib/vaani/adapter.ts` returns 501 until written against Vaani's API docs |
 | HubSpot | ✅ written, not yet run live |
@@ -38,12 +38,13 @@ Only `src/lib/vaani/` knows Vaani's payload shapes. Everything else uses `Normal
 
 ## Setup
 
-### 1. Supabase
-1. Create a project. In the SQL editor, run `supabase/migrations/0001_init.sql`, then `supabase/seed.sql`.
-2. Edit the three placeholder designers in **Table editor → designers**: name, email, `areas` (Pune localities they prefer), and `calcom_event_type_id` (step 3).
-3. Copy the project URL and the **secret** key into `SUPABASE_URL` / `SUPABASE_SECRET_KEY`.
+### 1. Neon
+1. Create a Neon project (AWS Mumbai, ap-south-1, is the closest region to Pune). In the **SQL Editor**, run `db/0001_init.sql`, then `db/seed.sql`. From a terminal, `psql "$DATABASE_URL" -f db/0001_init.sql` does the same.
+2. Edit the three placeholder designers in **Tables → designers**: name, email, `areas` (Pune localities they prefer), and `calcom_event_type_id` (step 3).
+3. Copy the **pooled** connection string into `DATABASE_URL`. The app talks to Neon over HTTPS with `@neondatabase/serverless`, which suits Vercel functions: there's no connection pool to manage.
+4. Optional: Vercel's Neon integration can create the database and set `DATABASE_URL` for you.
 
-RLS is on, with no policies, so only the server's secret key can read or write.
+Only the server holds `DATABASE_URL`. The browser never talks to the database.
 
 ### 2. Environment variables
 Copy `.env.example` → `.env.local` for local dev, and set the same keys in Vercel. `EMAIL_TEST_MODE` defaults to **true**: every email goes to `EMAIL_TEST_RECIPIENT` with a `[TEST → real recipient]` prefix. Set it to `false` only when going live.
@@ -77,7 +78,7 @@ Verify your sending domain, create an API key → `RESEND_API_KEY`, and set `RES
 ### 7. Vercel + crons
 1. Import the GitHub repo into Vercel and set the env vars. Set `APP_URL` to the production URL.
 2. `vercel.json` schedules the **daily digest** at `15 3 * * *` (03:15 UTC = 08:45 IST).
-3. **Vercel Hobby only allows daily crons.** The 15-minute ack check and the hourly HubSpot sync run from Supabase `pg_cron` instead: see `supabase/cron.sql`. On Vercel Pro you can move them into `vercel.json` (the paths are in that file).
+3. **Vercel Hobby only allows daily crons.** The 15-minute ack check and the hourly HubSpot sync run from GitHub Actions instead (`.github/workflows/crons.yml`). Add the repo secrets `APP_URL` and `CRON_SECRET`. GitHub can start scheduled runs a few minutes late, which is fine for these jobs. On Vercel Pro you can move both into `vercel.json` and delete the workflow.
 4. Every cron endpoint requires `Authorization: Bearer $CRON_SECRET`.
 
 ## Testing

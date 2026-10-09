@@ -1,4 +1,4 @@
-import { db, must } from "./db";
+import { sql, sqlOne } from "./db";
 import type { Designer } from "./types";
 
 /** True if any of the designer's areas appears in the caller's location (case-insensitive). */
@@ -22,7 +22,7 @@ export function chooseDesigner(designers: Designer[], location: string | null | 
 }
 
 export async function listDesigners(): Promise<Designer[]> {
-  return must(await db().from("designers").select("*").order("name"), "designers list") as Designer[];
+  return sql<Designer>`select * from designers order by name`;
 }
 
 export async function pickDesigner(location: string | null | undefined, opts: { requireCalendar?: boolean } = {}): Promise<Designer | null> {
@@ -30,9 +30,9 @@ export async function pickDesigner(location: string | null | undefined, opts: { 
 }
 
 export async function getDesigner(id: string): Promise<Designer | null> {
-  return must(await db().from("designers").select("*").eq("id", id).maybeSingle(), "designer get") as Designer | null;
+  return sqlOne<Designer>`select * from designers where id = ${id}`;
 }
 
 export async function markAssigned(id: string): Promise<void> {
-  must(await db().from("designers").update({ last_assigned_at: new Date().toISOString() }).eq("id", id), "designer markAssigned");
+  await sql`update designers set last_assigned_at = now() where id = ${id}`;
 }

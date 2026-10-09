@@ -1,6 +1,5 @@
-import type { StoredClassification } from "@/lib/classify/schema";
 import { isAuthorizedCron } from "@/lib/cron";
-import { db, must } from "@/lib/db";
+import { sql } from "@/lib/db";
 import { sendEmail } from "@/lib/email/send";
 import { digestEmail } from "@/lib/email/templates";
 import { appUrl, env } from "@/lib/env";
@@ -18,10 +17,11 @@ export async function GET(req: Request) {
   const m = computeMetrics(await loadRange(start, end));
 
   // Unacknowledged = all still-open handoffs, not just yesterday's.
-  const open = must(
-    await db().from("handoffs").select("call_id, designer_id, email_sent_at, calls(classification)").is("acknowledged_at", null).not("email_sent_at", "is", null).order("email_sent_at"),
-    "digest open handoffs",
-  ) as unknown as { call_id: string; designer_id: string; email_sent_at: string; calls: { classification: StoredClassification | null } | null }[];
+  const open = await sql<{ call_id: string; designer_id: string; email_sent_at: string; lead_name: string | null }>`
+    select h.call_id, h.designer_id, h.email_sent_at, c.classification->'fields'->>'name' as lead_name
+    from handoffs h join calls c on c.id = h.call_id
+    where h.acknowledged_at is null and h.email_sent_at is not null
+    order by h.email_sent_at`;
   const designers = await designerMap();
   const callbacks = await loadCallbacks();
 
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
       bookingFailed: m.bookingFailed,
       incidents: m.complianceIncidents,
       unacknowledged: open.map((h) => ({
-        name: h.calls?.classification?.fields.name ?? "Unknown caller",
+        name: h.lead_name ?? "Unknown caller",
         designer: designers.get(h.designer_id)?.name ?? "unknown",
         sentAt: h.email_sent_at,
         url: transcriptUrl(h.call_id),

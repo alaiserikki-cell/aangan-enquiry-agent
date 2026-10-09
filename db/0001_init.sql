@@ -1,7 +1,7 @@
 -- Aangan Studio enquiry agent: initial schema.
--- Run in the Supabase SQL editor (or `supabase db push`). Safe to run once on an empty project.
-
-create extension if not exists pgcrypto;
+-- Neon Postgres. Run once on an empty database: paste into the Neon SQL Editor, or
+--   psql "$DATABASE_URL" -f db/0001_init.sql
+-- gen_random_uuid() is built into Postgres 13+, so no extension is needed.
 
 -- ---------------------------------------------------------------------------
 -- designers
@@ -148,14 +148,3 @@ end $$;
 
 create trigger calls_updated_at before update on calls
   for each row execute function set_updated_at();
-
--- ---------------------------------------------------------------------------
--- Row level security: on, with no policies. Only the server (secret key) reads
--- and writes; the anon/publishable key can see nothing.
--- ---------------------------------------------------------------------------
-alter table designers    enable row level security;
-alter table calls        enable row level security;
-alter table handoffs     enable row level security;
-alter table hubspot_sync enable row level security;
-alter table incidents    enable row level security;
-alter table emails       enable row level security;

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { StoredClassification } from "@/lib/classify/schema";
-import { db, must } from "@/lib/db";
+import { sql, sqlOne } from "@/lib/db";
 import { demoCall, demoDesigners, demoHandoff, isDemo } from "@/lib/demo";
 import { getDesigner } from "@/lib/designers";
 import { redactPrices } from "@/lib/price-guard";
@@ -21,17 +21,17 @@ export default async function CallPage({ params }: PageProps<"/dashboard/calls/[
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
   const demo = isDemo();
-  const call = demo ? demoCall(id) : (must(await db().from("calls").select("*").eq("id", id).maybeSingle(), "call") as CallRow | null);
+  const call = demo ? demoCall(id) : await sqlOne<CallRow>`select * from calls where id = ${id}`;
   if (!call) notFound();
-  const [designer, handoff, incidents] = demo
-    ? [call.designer_id ? demoDesigners().get(call.designer_id) ?? null : null, { data: demoHandoff(id) }, { data: [] as { type: string }[] }]
+  type Handoff = { email_sent_at: string | null; acknowledged_at: string | null; escalated_at: string | null };
+  const [designer, h, incidents] = demo
+    ? [call.designer_id ? demoDesigners().get(call.designer_id) ?? null : null, demoHandoff(id) as Handoff | null, [] as { type: string }[]]
     : await Promise.all([
         call.designer_id ? getDesigner(call.designer_id) : null,
-        db().from("handoffs").select("email_sent_at, acknowledged_at, escalated_at").eq("call_id", id).maybeSingle(),
-        db().from("incidents").select("type, created_at").eq("call_id", id),
+        sqlOne<Handoff>`select email_sent_at, acknowledged_at, escalated_at from handoffs where call_id = ${id}`,
+        sql<{ type: string }>`select type from incidents where call_id = ${id}`,
       ]);
   const c = call.classification as StoredClassification | null;
-  const h = handoff.data as { email_sent_at: string | null; acknowledged_at: string | null; escalated_at: string | null } | null;
   const r = (s: string | null | undefined) => (s ? redactPrices(s) : "–");
 
   const rows: [string, React.ReactNode][] = [
@@ -74,7 +74,7 @@ export default async function CallPage({ params }: PageProps<"/dashboard/calls/[
         {c?.fields.name ? r(c.fields.name) : "Call"}
       </h1>
       {c?.caller_quote ? <p style={{ fontStyle: "italic", fontSize: 17 }}>“{r(c.caller_quote)}”</p> : null}
-      {(incidents.data ?? []).length ? <p className={styles.error}>Incidents: {(incidents.data ?? []).map((i) => i.type).join(", ")}</p> : null}
+      {incidents.length ? <p className={styles.error}>Incidents: {incidents.map((i) => i.type).join(", ")}</p> : null}
       {call.processing_error ? <p className={styles.error}>Processing error: {call.processing_error}</p> : null}
 
       <h2 className={styles.h2}>Details</h2>

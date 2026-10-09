@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { db, must } from "../db";
+import { sql, sqlOne } from "../db";
 import { env, envOptional } from "../env";
 import { log } from "../log";
 import { assertNoPriceFigures } from "../price-guard";
@@ -29,27 +29,18 @@ export function emailTestMode(): boolean {
 export async function sendEmail(email: OutgoingEmail): Promise<boolean> {
   assertNoPriceFigures(`${email.subject}\n${email.html}\n${email.text}`, `${email.kind} email`);
 
-  const existing = must(
-    await db().from("emails").select("id, sent_at").eq("dedupe_key", email.dedupeKey).maybeSingle(),
-    "emails lookup",
-  );
+  const existing = await sqlOne<{ id: string; sent_at: string | null }>`select id, sent_at from emails where dedupe_key = ${email.dedupeKey}`;
   if (existing?.sent_at) return false;
 
   const testMode = emailTestMode();
   const to = testMode ? [envOptional("EMAIL_TEST_RECIPIENT", "delivered@resend.dev")] : email.to;
   const subject = testMode ? `[TEST → ${email.to.join(", ")}] ${email.subject}` : email.subject;
 
-  const row = must(
-    await db()
-      .from("emails")
-      .upsert(
-        { call_id: email.callId ?? null, kind: email.kind, dedupe_key: email.dedupeKey, recipients: email.to, subject: email.subject, test_mode: testMode },
-        { onConflict: "dedupe_key" },
-      )
-      .select("id")
-      .single(),
-    "emails upsert",
-  ) as { id: string };
+  const row = (await sqlOne<{ id: string }>`
+    insert into emails (call_id, kind, dedupe_key, recipients, subject, test_mode)
+    values (${email.callId ?? null}, ${email.kind}, ${email.dedupeKey}, ${email.to}::text[], ${email.subject}, ${testMode})
+    on conflict (dedupe_key) do update set subject = excluded.subject
+    returning id`)!;
 
   resend ??= new Resend(env("RESEND_API_KEY"));
   const { data, error } = await resend.emails.send(
@@ -58,14 +49,11 @@ export async function sendEmail(email: OutgoingEmail): Promise<boolean> {
   );
 
   if (error) {
-    await db().from("emails").update({ error: error.message }).eq("id", row.id);
+    await sql`update emails set error = ${error.message} where id = ${row.id}`;
     throw new Error(`Resend failed for ${email.kind}: ${error.message}`);
   }
 
-  must(
-    await db().from("emails").update({ resend_id: data?.id ?? null, sent_at: new Date().toISOString(), error: null }).eq("id", row.id),
-    "emails mark sent",
-  );
+  await sql`update emails set resend_id = ${data?.id ?? null}, sent_at = now(), error = null where id = ${row.id}`;
   log.info("email.sent", { kind: email.kind, callId: email.callId, testMode });
   return true;
 }

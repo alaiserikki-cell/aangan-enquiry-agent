@@ -1,0 +1,51 @@
+# Frequent jobs. Vercel Hobby only allows once-a-day crons, so the 15-minute ack check and
+# the hourly HubSpot sync are triggered from GitHub Actions instead. The 08:45 IST digest
+# stays in vercel.json.
+#
+# Repo → Settings → Secrets and variables → Actions:
+#   APP_URL      e.g. https://aangan-enquiry-agent.vercel.app
+#   CRON_SECRET  same value as the CRON_SECRET env var in Vercel
+#
+# GitHub may start scheduled runs a few minutes late under load. On Vercel Pro, delete this
+# file and add both paths to vercel.json instead.
+
+name: crons
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Which job to run"
+        type: choice
+        options: [ack-check, hubspot-sync]
+        default: ack-check
+
+permissions: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Pick job
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "path=${{ inputs.job }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 * * * *" ]; then
+            echo "path=hubspot-sync" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=ack-check" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Call endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then echo "APP_URL / CRON_SECRET secrets not set; skipping"; exit 0; fi
+          curl --fail-with-body --silent --show-error --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/${{ steps.pick.outputs.path }}"

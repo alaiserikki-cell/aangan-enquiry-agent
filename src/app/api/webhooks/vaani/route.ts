@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { db, must } from "@/lib/db";
+import { json, sqlOne } from "@/lib/db";
 import { log } from "@/lib/log";
 import { processCall } from "@/lib/route/process-call";
 import { PROVIDER, VaaniNotConfiguredError, parseCallWebhook, verifyWebhookSignature } from "@/lib/vaani/adapter";
@@ -30,39 +30,31 @@ export async function POST(req: Request) {
   }
 
   const call = parseCallWebhook(payload);
-  const existing = must(
-    await db().from("calls").select("id, status").eq("provider", PROVIDER).eq("external_id", call.externalId).maybeSingle(),
-    "webhook lookup",
-  ) as { id: string; status: string } | null;
+  const vaaniMinutes = call.durationSeconds != null ? Number((call.durationSeconds / 60).toFixed(3)) : null;
 
-  const fields = {
-    raw_payload: payload,
-    caller_phone: call.callerPhone,
-    started_at: call.startedAt,
-    ended_at: call.endedAt,
-    duration_seconds: call.durationSeconds,
-    vaani_minutes: call.durationSeconds != null ? Number((call.durationSeconds / 60).toFixed(3)) : null,
-    transcript: call.transcript,
-  };
+  // New call → insert as 'received'. Row created mid-call by a tool ('in_call') → fill it in.
+  // Anything else is a retry of a call we already have: leave it alone.
+  const stored = await sqlOne<{ id: string }>`
+    insert into calls (provider, channel, external_id, status, raw_payload, caller_phone, started_at, ended_at, duration_seconds, vaani_minutes, transcript)
+    values (${PROVIDER}, ${call.channel}, ${call.externalId}, 'received', ${json(payload)}::jsonb, ${call.callerPhone},
+            ${call.startedAt}, ${call.endedAt}, ${call.durationSeconds}, ${vaaniMinutes}, ${json(call.transcript)}::jsonb)
+    on conflict (provider, external_id) do update set
+      status = 'received',
+      raw_payload = excluded.raw_payload,
+      caller_phone = coalesce(excluded.caller_phone, calls.caller_phone),
+      started_at = excluded.started_at,
+      ended_at = excluded.ended_at,
+      duration_seconds = excluded.duration_seconds,
+      vaani_minutes = excluded.vaani_minutes,
+      transcript = excluded.transcript
+    where calls.status = 'in_call'
+    returning id`;
 
-  let callId: string;
-  if (!existing) {
-    const inserted = await db()
-      .from("calls")
-      .insert({ provider: PROVIDER, channel: call.channel, external_id: call.externalId, status: "received", ...fields })
-      .select("id")
-      .single();
-    if (inserted.error?.code === "23505") return Response.json({ ok: true, duplicate: true }); // concurrent retry
-    callId = (must(inserted, "webhook insert") as { id: string }).id;
-  } else if (existing.status === "in_call") {
-    // Row was created by a tool call during the conversation; fill in the post-call data.
-    must(await db().from("calls").update({ status: "received", ...fields }).eq("id", existing.id), "webhook update");
-    callId = existing.id;
-  } else {
-    log.info("webhook.duplicate", { callId: existing.id, status: existing.status });
+  if (!stored) {
+    log.info("webhook.duplicate", { externalId: call.externalId });
     return Response.json({ ok: true, duplicate: true });
   }
 
-  after(() => processCall(callId));
+  after(() => processCall(stored.id));
   return Response.json({ ok: true });
 }

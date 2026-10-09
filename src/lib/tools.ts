@@ -2,7 +2,7 @@
 // shape through the adapter and call these. Hard budget: respond within 2 seconds.
 
 import { createBooking, getSlots, pickSlots } from "./calcom";
-import { db, must } from "./db";
+import { sql, sqlOne } from "./db";
 import { getDesigner, markAssigned, pickDesigner } from "./designers";
 import { log } from "./log";
 import { formatIstSpoken } from "./time";
@@ -49,34 +49,24 @@ async function withDeadline(tool: NormalizedToolCall, name: string, work: (deadl
 const remaining = (deadline: number) => Math.max(300, deadline - Date.now() - 150);
 
 /** Create the call row on the first tool call so the booking can be attached before the webhook arrives. */
-async function ensureCallRow(tool: NormalizedToolCall, patch: Record<string, unknown> = {}): Promise<{ id: string; designer_id: string | null } | null> {
+async function ensureCallRow(tool: NormalizedToolCall): Promise<{ id: string; designer_id: string | null } | null> {
   if (!tool.externalCallId) {
     log.warn("tool.no_call_id");
     return null;
   }
-  const existing = must(
-    await db().from("calls").select("id, designer_id").eq("provider", "vaani").eq("external_id", tool.externalCallId).maybeSingle(),
-    "tool call lookup",
-  ) as { id: string; designer_id: string | null } | null;
-  if (existing) {
-    if (Object.keys(patch).length) must(await db().from("calls").update(patch).eq("id", existing.id), "tool call patch");
-    return { ...existing, ...(patch.designer_id ? { designer_id: patch.designer_id as string } : {}) };
-  }
-  return must(
-    await db()
-      .from("calls")
-      .insert({ provider: "vaani", channel: "phone", external_id: tool.externalCallId, status: "in_call", caller_phone: tool.callerPhone, ...patch })
-      .select("id, designer_id")
-      .single(),
-    "tool call insert",
-  ) as { id: string; designer_id: string | null };
+  // Insert-or-fetch in one round trip; the no-op update makes RETURNING yield the existing row.
+  return sqlOne<{ id: string; designer_id: string | null }>`
+    insert into calls (provider, channel, external_id, status, caller_phone)
+    values ('vaani', 'phone', ${tool.externalCallId}, 'in_call', ${tool.callerPhone})
+    on conflict (provider, external_id) do update set provider = excluded.provider
+    returning id, designer_id`;
 }
 
 async function markBookingFailed(tool: NormalizedToolCall): Promise<void> {
   if (!tool.externalCallId) return;
   const call = await ensureCallRow(tool);
   // Never downgrade a booking that landed after the deadline fired.
-  if (call) await db().from("calls").update({ booking_status: "booking_failed" }).eq("id", call.id).neq("booking_status", "booked");
+  if (call) await sql`update calls set booking_status = 'booking_failed' where id = ${call.id} and booking_status <> 'booked'`;
 }
 
 async function designerFor(call: { designer_id: string | null } | null, location: string | null): Promise<Designer> {
@@ -97,7 +87,7 @@ export function checkAvailability(tool: NormalizedToolCall): Promise<ToolResult>
     const designer = await designerFor(call, location);
     if (call && call.designer_id !== designer.id) {
       // Tentative: the round-robin pointer only moves when a booking is made.
-      await db().from("calls").update({ designer_id: designer.id }).eq("id", call.id);
+      await sql`update calls set designer_id = ${designer.id} where id = ${call.id}`;
     }
 
     const now = new Date();
@@ -141,13 +131,10 @@ export function bookConsultation(tool: NormalizedToolCall): Promise<ToolResult> 
     );
 
     if (call) {
-      must(
-        await db()
-          .from("calls")
-          .update({ designer_id: designer.id, booking_status: "booked", booking_uid: booking.uid, booking_start: booking.start, consultation_mode: consultationMode })
-          .eq("id", call.id),
-        "store booking",
-      );
+      await sql`
+        update calls set designer_id = ${designer.id}, booking_status = 'booked', booking_uid = ${booking.uid},
+          booking_start = ${booking.start}, consultation_mode = ${consultationMode}
+        where id = ${call.id}`;
     }
     await markAssigned(designer.id);
 

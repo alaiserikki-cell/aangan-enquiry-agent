@@ -1,5 +1,5 @@
 -- Placeholder designers. Edit names, emails, areas and Cal.com event type IDs
--- before going live. Run after 0001_init.sql.
+-- before going live. Run after db/0001_init.sql (Neon SQL Editor or psql).
 
 insert into designers (name, email, areas, active, calcom_event_type_id) values
   ('Designer One',   'designer.one@example.com',   array['Kothrud', 'Karve Nagar', 'Warje', 'Bavdhan', 'Aundh', 'Baner', 'Pashan'], true, null),

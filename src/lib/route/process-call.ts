@@ -6,7 +6,7 @@
 import { newAckToken, ackUrl } from "../ack";
 import { classifyTranscript } from "../classify/gemini";
 import type { StoredClassification } from "../classify/schema";
-import { db, must } from "../db";
+import { json, sql, sqlOne } from "../db";
 import { getDesigner, markAssigned, pickDesigner } from "../designers";
 import { complianceEmail, existingClientEmail, handoffEmail, needsReviewEmail } from "../email/templates";
 import { sendEmail } from "../email/send";
@@ -25,20 +25,11 @@ export function transcriptUrl(callId: string): string {
 }
 
 export async function processCall(callId: string): Promise<void> {
-  const claimed = must(
-    await db()
-      .from("calls")
-      .update({ status: "processing", processing_error: null })
-      .eq("id", callId)
-      .in("status", ["received", "failed"])
-      .lt("processing_attempts", MAX_ATTEMPTS)
-      .select("*")
-      .maybeSingle(),
-    "claim call",
-  ) as CallRow | null;
+  const claimed = await sqlOne<CallRow>`
+    update calls set status = 'processing', processing_error = null, processing_attempts = processing_attempts + 1
+    where id = ${callId} and status in ('received', 'failed') and processing_attempts < ${MAX_ATTEMPTS}
+    returning *`;
   if (!claimed) return; // already processing / processed / out of attempts
-
-  await db().from("calls").update({ processing_attempts: claimed.processing_attempts + 1 }).eq("id", callId);
 
   try {
     const c = await ensureClassified(claimed);
@@ -52,11 +43,12 @@ export async function processCall(callId: string): Promise<void> {
       }
     }
     if (errors.length) throw new Error(errors.join(" | "));
-    must(await db().from("calls").update({ status: "processed" }).eq("id", callId), "mark processed");
+    await sql`update calls set status = 'processed' where id = ${callId}`;
     log.info("call.processed", { callId, outcome: c.outcome });
   } catch (err) {
     log.error("call.process_failed", err, { callId });
-    await db().from("calls").update({ status: "failed", processing_error: String(err instanceof Error ? err.message : err).slice(0, 2000) }).eq("id", callId);
+    const message = String(err instanceof Error ? err.message : err).slice(0, 2000);
+    await sql`update calls set status = 'failed', processing_error = ${message} where id = ${callId}`;
   }
 }
 
@@ -67,21 +59,16 @@ async function ensureClassified(call: CallRow): Promise<StoredClassification> {
   const callDate = istDateKey(new Date(call.started_at ?? call.created_at));
   const { classification, usage } = await classifyTranscript(transcriptToText(turns), callDate);
 
-  must(
-    await db()
-      .from("calls")
-      .update({
-        classification,
-        outcome: classification.outcome,
-        decline_reason: classification.decline_reason,
-        review_reason: classification.review_reason,
-        classified_at: new Date().toISOString(),
-        gemini_input_tokens: usage.inputTokens,
-        gemini_output_tokens: usage.outputTokens,
-      })
-      .eq("id", call.id),
-    "store classification",
-  );
+  await sql`
+    update calls set
+      classification = ${json(classification)}::jsonb,
+      outcome = ${classification.outcome},
+      decline_reason = ${classification.decline_reason},
+      review_reason = ${classification.review_reason},
+      classified_at = now(),
+      gemini_input_tokens = ${usage.inputTokens},
+      gemini_output_tokens = ${usage.outputTokens}
+    where id = ${call.id}`;
   return classification;
 }
 
@@ -116,11 +103,8 @@ async function runAction(action: Action, call: CallRow, c: StoredClassification)
   }
 }
 
-async function recordIncident(callId: string, type: string, details: Record<string, unknown>): Promise<boolean> {
-  const res = await db().from("incidents").insert({ call_id: callId, type, details });
-  if (res.error?.code === "23505") return false; // already recorded
-  if (res.error) throw new Error(`incident insert: ${res.error.message}`);
-  return true;
+async function recordIncident(callId: string, type: string, details: Record<string, unknown>): Promise<void> {
+  await sql`insert into incidents (call_id, type, details) values (${callId}, ${type}, ${json(details)}::jsonb) on conflict (call_id, type) do nothing`;
 }
 
 async function complianceIncident(call: CallRow): Promise<void> {
@@ -132,7 +116,7 @@ async function complianceIncident(call: CallRow): Promise<void> {
     to: [env("NIKHIL_EMAIL")],
     ...complianceEmail({ callId: call.id, transcriptUrl: transcriptUrl(call.id), endedAt: call.ended_at }),
   });
-  await db().from("incidents").update({ notified_at: new Date().toISOString() }).eq("call_id", call.id).eq("type", "price_mentioned_by_agent");
+  await sql`update incidents set notified_at = now() where call_id = ${call.id} and type = 'price_mentioned_by_agent'`;
 }
 
 async function resolveDesigner(call: CallRow, c: StoredClassification) {
@@ -143,7 +127,7 @@ async function resolveDesigner(call: CallRow, c: StoredClassification) {
   const d = await pickDesigner(c.fields.location);
   if (!d) throw new Error("No active designer to assign");
   await markAssigned(d.id);
-  must(await db().from("calls").update({ designer_id: d.id }).eq("id", call.id), "assign designer");
+  await sql`update calls set designer_id = ${d.id} where id = ${call.id}`;
   call.designer_id = d.id;
   return d;
 }
@@ -152,19 +136,14 @@ async function designerHandoff(call: CallRow, c: StoredClassification, pendingRe
   const designer = await resolveDesigner(call, c);
 
   // Reuse an existing handoff row on retry; a fresh token is only issued if the email never went out.
-  const existing = must(
-    await db().from("handoffs").select("id, email_sent_at").eq("call_id", call.id).maybeSingle(),
-    "handoff lookup",
-  ) as { id: string; email_sent_at: string | null } | null;
+  const existing = await sqlOne<{ email_sent_at: string | null }>`select email_sent_at from handoffs where call_id = ${call.id}`;
   if (existing?.email_sent_at) return;
 
   const { token, hash, expiresAt } = newAckToken();
-  must(
-    await db()
-      .from("handoffs")
-      .upsert({ call_id: call.id, designer_id: designer.id, ack_token: hash, ack_expires_at: expiresAt.toISOString() }, { onConflict: "call_id" }),
-    "handoff upsert",
-  );
+  await sql`
+    insert into handoffs (call_id, designer_id, ack_token, ack_expires_at)
+    values (${call.id}, ${designer.id}, ${hash}, ${expiresAt.toISOString()})
+    on conflict (call_id) do update set designer_id = excluded.designer_id, ack_token = excluded.ack_token, ack_expires_at = excluded.ack_expires_at`;
 
   const rendered = handoffEmail({
     c,
@@ -181,7 +160,7 @@ async function designerHandoff(call: CallRow, c: StoredClassification, pendingRe
   // A booking failure means a 2-hour callback promise: copy Nikhil so it can't slip.
   const to = call.booking_status === "booking_failed" ? [designer.email, env("NIKHIL_EMAIL")] : [designer.email];
   await sendEmail({ kind: "handoff", dedupeKey: `${call.id}:handoff`, callId: call.id, to, ...rendered });
-  must(await db().from("handoffs").update({ email_sent_at: new Date().toISOString() }).eq("call_id", call.id), "handoff sent");
+  await sql`update handoffs set email_sent_at = now() where call_id = ${call.id}`;
 }
 
 export function dealDescription(c: StoredClassification, bookingStart: string | null, designerName: string | null): string {
@@ -203,7 +182,7 @@ export function dealDescription(c: StoredClassification, bookingStart: string | 
 }
 
 async function hubspotDeal(call: CallRow, c: StoredClassification): Promise<void> {
-  const existing = must(await db().from("hubspot_sync").select("deal_id").eq("call_id", call.id).maybeSingle(), "hubspot_sync lookup") as { deal_id: string | null } | null;
+  const existing = await sqlOne<{ deal_id: string | null }>`select deal_id from hubspot_sync where call_id = ${call.id}`;
   if (existing?.deal_id) return;
 
   const designer = await resolveDesigner(call, c);
@@ -211,11 +190,8 @@ async function hubspotDeal(call: CallRow, c: StoredClassification): Promise<void
   const dealName = redactPrices(`${c.fields.name ?? "Unknown"}, ${c.fields.property_type ?? "project"} in ${c.fields.location ?? "Pune"}`);
   const deal = await createDeal({ name: dealName, description: dealDescription(c, call.booking_start, designer.name), contactId, consultationAt: call.booking_start });
 
-  must(
-    await db().from("hubspot_sync").upsert(
-      { call_id: call.id, contact_id: contactId, deal_id: deal.id, deal_stage: deal.stage, synced_at: new Date().toISOString() },
-      { onConflict: "call_id" },
-    ),
-    "hubspot_sync upsert",
-  );
+  await sql`
+    insert into hubspot_sync (call_id, contact_id, deal_id, deal_stage, synced_at)
+    values (${call.id}, ${contactId}, ${deal.id}, ${deal.stage}, now())
+    on conflict (call_id) do update set contact_id = excluded.contact_id, deal_id = excluded.deal_id, deal_stage = excluded.deal_stage, synced_at = now()`;
 }

@@ -2,7 +2,7 @@
 // range and aggregate in code rather than maintaining SQL views.
 
 import type { StoredClassification } from "./classify/schema";
-import { db, must } from "./db";
+import { sql } from "./db";
 import { envRate } from "./env";
 import { isAfterHours } from "./time";
 import type { CallRow, Designer } from "./types";
@@ -67,18 +67,18 @@ export interface RangeData {
 }
 
 export async function loadRange(start: Date, end: Date): Promise<RangeData> {
-  const [calls, emails, incidents] = await Promise.all([
-    db().from("calls").select("*").neq("status", "in_call").gte("created_at", start.toISOString()).lt("created_at", end.toISOString()).order("created_at", { ascending: false }),
-    db().from("emails").select("id", { count: "exact", head: true }).not("sent_at", "is", null).gte("sent_at", start.toISOString()).lt("sent_at", end.toISOString()),
-    db().from("incidents").select("call_id, type, created_at").gte("created_at", start.toISOString()).lt("created_at", end.toISOString()),
+  const s = start.toISOString();
+  const e = end.toISOString();
+  const [calls, emails, incidents, handoffs] = await Promise.all([
+    sql<CallRow>`select * from calls where status <> 'in_call' and created_at >= ${s} and created_at < ${e} order by created_at desc`,
+    sql<{ n: number }>`select count(*)::int as n from emails where sent_at is not null and sent_at >= ${s} and sent_at < ${e}`,
+    sql<RangeData["incidents"][number]>`select call_id, type, created_at from incidents where created_at >= ${s} and created_at < ${e}`,
+    sql<HandoffRow>`
+      select h.call_id, h.designer_id, h.email_sent_at, h.acknowledged_at, h.escalated_at
+      from handoffs h join calls c on c.id = h.call_id
+      where c.status <> 'in_call' and c.created_at >= ${s} and c.created_at < ${e}`,
   ]);
-  const callRows = must(calls, "metrics calls") as CallRow[];
-  if (emails.error) throw new Error(`metrics emails: ${emails.error.message}`);
-  const ids = callRows.map((c) => c.id);
-  const handoffs = ids.length
-    ? (must(await db().from("handoffs").select("call_id, designer_id, email_sent_at, acknowledged_at, escalated_at").in("call_id", ids), "metrics handoffs") as HandoffRow[])
-    : [];
-  return { calls: callRows, handoffs, incidents: must(incidents, "metrics incidents") as RangeData["incidents"], emailsSent: emails.count ?? 0 };
+  return { calls, handoffs, incidents, emailsSent: emails[0]?.n ?? 0 };
 }
 
 export function computeMetrics(d: RangeData): Metrics {
@@ -163,12 +163,8 @@ export interface Pipeline {
 }
 
 export async function loadPipeline(): Promise<Pipeline> {
-  const rows = must(await db().from("hubspot_sync").select("deal_id, is_closed, is_closed_won, won_amount, synced_at").not("deal_id", "is", null), "pipeline") as {
-    is_closed: boolean;
-    is_closed_won: boolean;
-    won_amount: number | null;
-    synced_at: string;
-  }[];
+  const rows = await sql<{ is_closed: boolean; is_closed_won: boolean; won_amount: number | null; synced_at: string }>`
+    select is_closed, is_closed_won, won_amount, synced_at from hubspot_sync where deal_id is not null`;
   const won = rows.filter((r) => r.is_closed_won);
   const amounts = won.map((r) => r.won_amount).filter((a): a is number => a != null);
   return {
@@ -181,14 +177,13 @@ export async function loadPipeline(): Promise<Pipeline> {
 
 /** Dropped calls with a number that nobody has called back yet (last 30 days). */
 export async function loadCallbacks(): Promise<CallRow[]> {
-  const since = new Date(Date.now() - 30 * 864e5).toISOString();
-  return must(
-    await db().from("calls").select("*").eq("outcome", "dropped").is("callback_done_at", null).not("caller_phone", "is", null).gte("created_at", since).order("created_at", { ascending: false }),
-    "callbacks",
-  ) as CallRow[];
+  return sql<CallRow>`
+    select * from calls
+    where outcome = 'dropped' and callback_done_at is null and caller_phone is not null and created_at >= now() - interval '30 days'
+    order by created_at desc`;
 }
 
 export async function designerMap(): Promise<Map<string, Designer>> {
-  const rows = must(await db().from("designers").select("*"), "designers") as Designer[];
+  const rows = await sql<Designer>`select * from designers`;
   return new Map(rows.map((d) => [d.id, d]));
 }

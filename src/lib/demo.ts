@@ -1,4 +1,4 @@
-// Sample data for previewing the dashboard without Supabase. Enabled only when
+// Sample data for previewing the dashboard without a database. Enabled only when
 // DASHBOARD_DEMO=true; every page using it shows a "Demo data" banner.
 // Deterministic, so the preview looks the same on every load.
 
