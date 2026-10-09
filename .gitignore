@@ -45,3 +45,5 @@ next-env.d.ts
 
 # local Windows dev launcher
 dev.cmd
+# local preview launcher config (machine-specific path)
+.claude/launch.json

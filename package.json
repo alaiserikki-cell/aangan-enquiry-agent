@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "replay": "tsx --env-file-if-exists=.env.local scripts/replay.ts"
+    "replay": "tsx --env-file-if-exists=.env.local scripts/replay.ts",
+    "db:setup": "tsx --env-file-if-exists=.env.local scripts/db-setup.ts"
   },
   "dependencies": {
     "@google/genai": "^2.28.0",
