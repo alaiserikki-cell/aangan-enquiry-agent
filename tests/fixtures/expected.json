@@ -1,0 +1,17 @@
+{
+  "_source": "test-set.md (Aangan_Sep 2026_Enquiries.pdf, Section 1). callDate is the IST date used for timeline checks; set it to the real call date if known.",
+  "cases": [
+    { "id": "T01", "summary": "Priya, 3BHK Kothrud, 1,400 sq ft, done by March, husband agrees", "callDate": "2026-09-15", "booked": true, "outcome": "qualified", "decline_reason": null, "pricing_requested": false, "flags": ["Referral from past client (Shruti Joshi)", "Budget not discussed"] },
+    { "id": "T02", "summary": "2BHK Wakad, 950 sq ft, asks for a ballpark twice, then books", "callDate": "2026-09-15", "booked": true, "outcome": "qualified", "decline_reason": null, "pricing_requested": true, "flags": ["Asked for pricing twice; expects a number at consultation", "Decision-maker not confirmed"] },
+    { "id": "T03", "summary": "Suresh Patil, home office in Nashik", "callDate": "2026-09-15", "booked": false, "outcome": "declined", "decline_reason": "out_of_area", "pricing_requested": false, "flags": [] },
+    { "id": "T04", "summary": "Wants colour and furniture ideas only, just exploring", "callDate": "2026-09-15", "booked": false, "outcome": "declined", "decline_reason": "advice_only", "pricing_requested": false, "flags": ["May return later for a full project"] },
+    { "id": "T07", "summary": "Living room + kitchen before Diwali (~3 weeks), offered post-Diwali start, 'let me think'", "callDate": "2026-09-15", "booked": false, "outcome": "declined", "decline_reason": "timeline", "pricing_requested": false, "flags": ["Offered November start; caller undecided, re-engage"] },
+    { "id": "T09", "summary": "Sheetal Deshpande, existing 2BHK Viman Nagar project, designer Aryan unresponsive", "callDate": "2026-09-15", "booked": false, "outcome": "existing_client", "decline_reason": null, "pricing_requested": false, "flags": ["Wants callback from Nikhil or senior person", "Designer: Aryan"] },
+    { "id": "T10", "summary": "1BHK Kharadi, kitchen + bedroom, volunteers ₹1 to 1.5 lakh", "callDate": "2026-09-15", "booked": false, "outcome": "declined", "decline_reason": "budget_mismatch", "pricing_requested": false, "flags": [] },
+    { "id": "T13", "summary": "3BHK Aundh, 1,100 sq ft, presses for range, then books", "callDate": "2026-09-15", "booked": true, "outcome": "qualified", "decline_reason": null, "pricing_requested": true, "flags": ["Pushed hard for a ballpark", "Decision-maker not confirmed"] },
+    { "id": "T14", "summary": "Son calling for parents, 3BHK Hadapsar, parents will attend", "callDate": "2026-09-15", "booked": true, "outcome": "qualified", "decline_reason": null, "pricing_requested": false, "flags": ["Caller is son; owners are parents and will decide", "Parents attend consultation"] },
+    { "id": "T15", "summary": "Smita, 2BHK Undri, possession in ~6 weeks, wants to start design now", "callDate": "2026-09-15", "booked": true, "outcome": "qualified", "decline_reason": null, "pricing_requested": false, "flags": ["Possession in ~6 weeks; builder allows site access now"] },
+    { "id": "T18", "summary": "180 sq ft coworking pod", "callDate": "2026-09-15", "booked": false, "outcome": "needs_review", "decline_reason": null, "pricing_requested": false, "flags": ["Very small commercial space; confirm fit"] },
+    { "id": "T19", "summary": "Restaurant in Koregaon Park", "callDate": "2026-09-15", "booked": false, "outcome": "declined", "decline_reason": "out_of_scope_type", "pricing_requested": false, "flags": [] }
+  ]
+}

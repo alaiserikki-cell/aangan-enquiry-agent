@@ -1,0 +1,92 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { StoredClassification } from "@/lib/classify/schema";
+import { db, must } from "@/lib/db";
+import { getDesigner } from "@/lib/designers";
+import { redactPrices } from "@/lib/price-guard";
+import { requireSession } from "@/lib/require-session";
+import { formatDuration, formatIst } from "@/lib/time";
+import type { CallRow } from "@/lib/types";
+import styles from "../../dashboard.module.css";
+
+export const metadata = { title: "Call · Aangan Enquiries" };
+
+export default async function CallPage({ params }: PageProps<"/dashboard/calls/[id]">) {
+  await requireSession();
+  const { id } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+
+  const call = must(await db().from("calls").select("*").eq("id", id).maybeSingle(), "call") as CallRow | null;
+  if (!call) notFound();
+  const [designer, handoff, incidents] = await Promise.all([
+    call.designer_id ? getDesigner(call.designer_id) : null,
+    db().from("handoffs").select("email_sent_at, acknowledged_at, escalated_at").eq("call_id", id).maybeSingle(),
+    db().from("incidents").select("type, created_at").eq("call_id", id),
+  ]);
+  const c = call.classification as StoredClassification | null;
+  const h = handoff.data as { email_sent_at: string | null; acknowledged_at: string | null; escalated_at: string | null } | null;
+  const r = (s: string | null | undefined) => (s ? redactPrices(s) : "–");
+
+  const rows: [string, React.ReactNode][] = [
+    ["When", formatIst(call.started_at ?? call.created_at, { withYear: true })],
+    ["Duration", formatDuration(call.duration_seconds)],
+    ["Caller number", call.caller_phone ? <a href={`tel:${call.caller_phone}`}>{call.caller_phone}</a> : "–"],
+    ["Outcome", c ? `${c.outcome}${c.decline_reason ? ` (${c.decline_reason})` : ""}` : call.status],
+    ...(c?.review_reason ? ([["Why review", r(c.review_reason)]] as [string, React.ReactNode][]) : []),
+    ["Confidence", c ? c.confidence.toFixed(2) : "–"],
+    ["Designer", designer?.name ?? "–"],
+    ["Booking", call.booking_status === "booked" && call.booking_start ? `${formatIst(call.booking_start)} (${call.consultation_mode ?? "venue not set"})` : call.booking_status.replace("_", " ")],
+    ["Handoff email", h?.email_sent_at ? formatIst(h.email_sent_at) : "–"],
+    ["Acknowledged", h?.acknowledged_at ? formatIst(h.acknowledged_at) : h?.escalated_at ? `No (escalated ${formatIst(h.escalated_at)})` : "No"],
+  ];
+  if (c) {
+    const f = c.fields;
+    rows.push(
+      ["Name", r(f.name)],
+      ["Location", r(f.location)],
+      ["Property", `${r(f.property_type)}${f.carpet_area_sqft ? `, ${f.carpet_area_sqft} sq ft` : ""}`],
+      ["Scope", r(f.scope)],
+      ["Current state", r(f.current_state)],
+      ["Needed by", r(f.needed_by)],
+      ["Decision-maker", `${r(f.decision_maker)} (${f.decision_maker_confirmed ? "confirmed" : "not confirmed"})`],
+      ["Budget", f.budget_volunteered ? "Mentioned by caller (amount withheld)" : "Not discussed"],
+      ["Source", r(f.source)],
+      ["Asked about pricing", c.pricing_requested ? "Yes" : "No"],
+      ["Agent mentioned a price", c.price_mentioned_by_agent ? "YES (compliance incident)" : "No"],
+      ["Flags", c.flags.length ? c.flags.map(r).join(" · ") : "–"],
+    );
+  }
+
+  return (
+    <main className={styles.page}>
+      <Link href="/dashboard" className={styles.back}>
+        ← Dashboard
+      </Link>
+      <h1 className={styles.h1} style={{ marginTop: 10 }}>
+        {c?.fields.name ? r(c.fields.name) : "Call"}
+      </h1>
+      {c?.caller_quote ? <p style={{ fontStyle: "italic", fontSize: 17 }}>“{r(c.caller_quote)}”</p> : null}
+      {(incidents.data ?? []).length ? <p className={styles.error}>Incidents: {(incidents.data ?? []).map((i) => i.type).join(", ")}</p> : null}
+      {call.processing_error ? <p className={styles.error}>Processing error: {call.processing_error}</p> : null}
+
+      <h2 className={styles.h2}>Details</h2>
+      <div className={`${styles.card} ${styles.kv}`}>
+        {rows.flatMap(([k, v]) => [<div key={`${k}-k`}>{k}</div>, <div key={`${k}-v`}>{v}</div>])}
+      </div>
+
+      <h2 className={styles.h2}>Transcript</h2>
+      <p className={styles.muted}>Money amounts are hidden on this page.</p>
+      <div className={`${styles.card} ${styles.transcript}`}>
+        {(call.transcript ?? []).length ? (
+          call.transcript!.map((t, i) => (
+            <div key={i} className={`${styles.turn} ${t.role === "agent" ? styles.agent : styles.caller}`}>
+              {redactPrices(t.text)}
+            </div>
+          ))
+        ) : (
+          <p className={styles.note}>No transcript stored.</p>
+        )}
+      </div>
+    </main>
+  );
+}
