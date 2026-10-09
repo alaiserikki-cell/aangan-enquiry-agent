@@ -1,32 +1,88 @@
+/* Tokens. Chart colours are the dataviz reference palette, validated for colour-blind
+   separation in both modes (scripts in the dataviz skill). Brand terracotta is UI accent only,
+   never a data colour. Dark values are their own steps, not an automatic flip. */
+
 :root {
-  --bg: #f6f3ef;
-  --surface: #ffffff;
-  --ink: #2b2420;
-  --muted: #6f655d;
-  --line: #e7e0d8;
-  --brand: #7a4b2a;
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --line: #e7e6e0;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --ring: rgba(11, 11, 11, 0.1);
+  --brand: #9a5a2f;
   --on-brand: #ffffff;
-  --pill: #f1ebe4;
-  --danger: #b3261e;
-  --good: #2e7d4f;
+  --brand-wash: #f6ebe2;
+
+  --series-1: #2a78d6; /* qualified / in-hours / vaani */
+  --series-2: #eb6834; /* declined / after-hours / gemini */
+  --series-3: #1baf7a; /* needs review / email */
+  --series-4: #eda100; /* other */
+
+  --good: #0ca30c;
+  --good-text: #006300;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --critical-text: #b3261e;
+
+  /* aliases used by older pages */
+  --bg: var(--page);
+  --pill: var(--surface-2);
+  --danger: var(--critical-text);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #171412;
-    --surface: #211d1a;
-    --ink: #eee7e0;
-    --muted: #a99d93;
-    --line: #362f2a;
-    --brand: #d59a6c;
-    --on-brand: #1a1410;
-    --pill: #2d2723;
-    --danger: #f2867d;
-    --good: #7fcf9d;
-  }
-  html {
+  :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --line: #2c2c2a;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --ring: rgba(255, 255, 255, 0.1);
+    --brand: #e0a072;
+    --on-brand: #1a1410;
+    --brand-wash: #2a211b;
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+
+    --good-text: #0ca30c;
+    --critical-text: #f2867d;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --line: #2c2c2a;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --ring: rgba(255, 255, 255, 0.1);
+  --brand: #e0a072;
+  --on-brand: #1a1410;
+  --brand-wash: #2a211b;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --good-text: #0ca30c;
+  --critical-text: #f2867d;
 }
 
 * {
@@ -41,8 +97,8 @@ body {
 }
 
 body {
-  background: var(--bg);
+  background: var(--page);
   color: var(--ink);
-  font-family: var(--font-geist-sans), -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }

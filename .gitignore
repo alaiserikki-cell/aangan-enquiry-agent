@@ -47,3 +47,4 @@ next-env.d.ts
 dev.cmd
 # local preview launcher config (machine-specific path)
 .claude/launch.json
+.neon

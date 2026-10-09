@@ -59,8 +59,8 @@ function build(): { calls: CallRow[]; handoffs: HandoffRow[] } {
   const now = Date.now();
   const calls: CallRow[] = [];
   const handoffs: HandoffRow[] = [];
-  // ~3 weeks of calls, newest first; several today so "Today" isn't empty.
-  for (let i = 0; i < 42; i++) {
+  // ~6 weeks of calls (so period-over-period deltas have history), newest first; several today.
+  for (let i = 0; i < 96; i++) {
     const s = SAMPLES[(i * 5) % SAMPLES.length];
     const hoursAgo = i < 5 ? i * 1.7 + 0.3 : 6 + i * 11.3;
     const start = new Date(now - hoursAgo * 3600e3);

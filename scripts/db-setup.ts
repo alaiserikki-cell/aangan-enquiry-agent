@@ -1,5 +1,6 @@
 /**
- * Apply db/0001_init.sql and db/seed.sql to the database in DATABASE_URL.
+ * Apply db/0001_init.sql and db/seed.sql to the database in DATABASE_URL_UNPOOLED
+ * (falls back to DATABASE_URL).
  *
  *   npm run db:setup
  *
@@ -13,8 +14,9 @@ import { join } from "node:path";
 import { Pool } from "@neondatabase/serverless";
 
 async function main() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set (put it in .env.local)");
+  // Schema changes go over the direct (non-pooled) connection; the app itself uses the pooled one.
+  const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL_UNPOOLED / DATABASE_URL is not set (put it in .env.local)");
 
   const pool = new Pool({ connectionString: url });
   const client = await pool.connect();
