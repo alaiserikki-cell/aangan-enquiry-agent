@@ -22,7 +22,7 @@ export async function GET() {
 
 /**
  * Start a public web call. Every guard here protects the free Vaani credit:
- * on/off switch, per-visitor cooldown, daily cap, lifetime cap, and a hard per-call time limit.
+ * on/off switch, daily cap, lifetime cap, and a hard per-call time limit.
  */
 export async function POST(req: Request) {
   const limits = await usage();
@@ -30,11 +30,11 @@ export async function POST(req: Request) {
 
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
   const visitor = createHash("sha256").update(`${ip}|${process.env.CRON_SECRET ?? "aangan"}`).digest("hex");
-  const cooldown = num("WEBCALL_VISITOR_COOLDOWN_MIN", 10);
-  const recentForVisitor = await sqlOne<{ n: number }>`
-    select count(*)::int as n from web_calls where visitor_hash = ${visitor} and created_at > now() - make_interval(mins => ${cooldown})`;
-  if ((recentForVisitor?.n ?? 0) > 0) {
-    return Response.json({ ok: false, reason: `One call per ${cooldown} minutes per visitor. Please try again a little later.` }, { status: 429 });
+  // Only a double-click guard; the daily/total caps and the per-call time limit protect the credit.
+  const justStarted = await sqlOne<{ n: number }>`
+    select count(*)::int as n from web_calls where visitor_hash = ${visitor} and created_at > now() - interval '20 seconds'`;
+  if ((justStarted?.n ?? 0) > 0) {
+    return Response.json({ ok: false, reason: "A call is already starting. Give it a few seconds." }, { status: 429 });
   }
 
   try {
