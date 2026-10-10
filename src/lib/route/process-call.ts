@@ -29,7 +29,10 @@ export function transcriptUrl(callId: string): string {
 export async function processCall(callId: string): Promise<void> {
   const claimed = await sqlOne<CallRow>`
     update calls set status = 'processing', processing_error = null, processing_attempts = processing_attempts + 1
-    where id = ${callId} and status in ('received', 'failed') and processing_attempts < ${MAX_ATTEMPTS}
+    where id = ${callId} and processing_attempts < ${MAX_ATTEMPTS}
+      and (status in ('received', 'failed')
+           -- a run killed mid-way (function timeout) is reclaimed after 3 minutes
+           or (status = 'processing' and updated_at < now() - interval '3 minutes'))
     returning *`;
   if (!claimed) return; // already processing / processed / out of attempts
 

@@ -2,9 +2,22 @@ import { after } from "next/server";
 import { json, sql, sqlOne } from "@/lib/db";
 import { log } from "@/lib/log";
 import { processCall } from "@/lib/route/process-call";
+import type { TranscriptTurn } from "@/lib/types";
 import { PROVIDER, VaaniNotConfiguredError, fetchCallTranscript } from "@/lib/vaani/adapter";
 
-export const maxDuration = 30;
+export const maxDuration = 60; // after(): classification + routing can take ~30 s with Gemini retries
+
+/** Captions captured in the browser, cleaned and bounded. Used only when Vaani's copy lacks the caller. */
+function browserTurns(raw: unknown): TranscriptTurn[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, 150)
+    .flatMap((t): TranscriptTurn[] => {
+      const o = (t && typeof t === "object" ? t : {}) as { role?: unknown; text?: unknown };
+      const text = typeof o.text === "string" ? o.text.replace(/\s+/g, " ").trim().slice(0, 1500) : "";
+      return text && (o.role === "agent" || o.role === "caller") ? [{ role: o.role, text }] : [];
+    });
+}
 
 /**
  * The browser calls this after a web call ends (and polls until it reports done). We pull the
@@ -13,7 +26,7 @@ export const maxDuration = 30;
  * (same external id) and processing happens once.
  */
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as { roomName?: unknown; seconds?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { roomName?: unknown; seconds?: unknown; turns?: unknown } | null;
   const roomName = typeof body?.roomName === "string" ? body.roomName.slice(0, 200) : "";
   if (!roomName) return Response.json({ ok: false, reason: "missing room" }, { status: 400 });
 
@@ -34,13 +47,20 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, callId: existing.id });
   }
 
-  let transcript;
+  let transcript: TranscriptTurn[] = [];
   try {
     transcript = await fetchCallTranscript([...new Set([externalId, roomName])]);
   } catch (err) {
     if (err instanceof VaaniNotConfiguredError) return Response.json({ ok: false, reason: "Web calling isn't set up." }, { status: 503 });
     log.warn("webcall.transcript_fetch_failed", { error: String(err) });
-    return Response.json({ ok: true, pending: true });
+  }
+  // Vaani's stored transcript of a web call can contain only the agent's lines. If so, use the
+  // live captions the browser captured (both sides), which come from the same agent.
+  const captured = browserTurns(body?.turns);
+  const hasCaller = (t: TranscriptTurn[]) => t.some((x) => x.role === "caller");
+  if (!hasCaller(transcript) && hasCaller(captured)) {
+    log.info("webcall.using_browser_transcript", { turns: captured.length });
+    transcript = captured;
   }
   if (!transcript.length) return Response.json({ ok: true, pending: true });
 

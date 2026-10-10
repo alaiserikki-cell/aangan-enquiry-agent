@@ -185,3 +185,27 @@
   font-weight: 600;
   color: var(--brand);
 }
+
+.captions {
+  width: 100%;
+  max-width: 520px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.captions p {
+  margin: 4px 0;
+}
+
+.capAgent {
+  color: var(--ink);
+}
+
+.capYou {
+  color: var(--ink-2);
+}

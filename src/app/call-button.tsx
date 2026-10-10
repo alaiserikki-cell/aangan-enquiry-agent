@@ -4,10 +4,38 @@
 // then joins the LiveKit room with the visitor's microphone. No phone number needed.
 
 import { useEffect, useRef, useState } from "react";
-import { Room, RoomEvent, Track, type RemoteTrack } from "livekit-client";
+import {
+  Room,
+  RoomEvent,
+  Track,
+  type Participant,
+  type RemoteTrack,
+  type TranscriptionSegment,
+} from "livekit-client";
 import styles from "./home.module.css";
 
 type Status = "idle" | "starting" | "live" | "processing" | "ended" | "error";
+
+interface Caption {
+  role: "agent" | "caller";
+  text: string;
+  at: number;
+}
+
+/** Captions in order, with consecutive lines from the same speaker joined into one turn. */
+function toTurns(
+  captions: Caption[],
+): { role: "agent" | "caller"; text: string }[] {
+  const turns: { role: "agent" | "caller"; text: string }[] = [];
+  for (const c of captions) {
+    const text = c.text.trim();
+    if (!text) continue;
+    const last = turns.at(-1);
+    if (last && last.role === c.role) last.text += ` ${text}`;
+    else turns.push({ role: c.role, text });
+  }
+  return turns;
+}
 
 interface Availability {
   enabled: boolean;
@@ -28,6 +56,8 @@ export function CallButton() {
   const [heardYou, setHeardYou] = useState(false);
   const [needsAudioTap, setNeedsAudioTap] = useState(false);
   const [liveSeconds, setLiveSeconds] = useState(0);
+  const [captions, setCaptions] = useState<Caption[]>([]);
+  const segmentsRef = useRef(new Map<string, Caption>());
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<HTMLDivElement>(null);
 
@@ -64,7 +94,13 @@ export function CallButton() {
         const res = await fetch("/api/webcall/finish", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomName, seconds }),
+          body: JSON.stringify({
+            roomName,
+            seconds,
+            turns: toTurns(
+              [...segmentsRef.current.values()].sort((a, b) => a.at - b.at),
+            ),
+          }),
         });
         const data = (await res.json()) as {
           ok: boolean;
@@ -92,6 +128,8 @@ export function CallButton() {
     setMessage(null);
     setResultId(null);
     setHeardYou(false);
+    segmentsRef.current = new Map();
+    setCaptions([]);
     setLiveSeconds(0);
     setNeedsAudioTap(false);
     setStatus("starting");
@@ -131,6 +169,41 @@ export function CallButton() {
       audioRef.current?.appendChild(el);
       el.play().catch(() => setNeedsAudioTap(true));
     });
+    // Live captions. Vaani's agent publishes transcriptions of both sides; we show them and keep
+    // them, because Vaani's stored transcript of a web call can miss the caller's lines.
+    const upsert = (id: string, role: Caption["role"], text: string) => {
+      const prev = segmentsRef.current.get(id);
+      segmentsRef.current.set(id, { role, text, at: prev?.at ?? Date.now() });
+      setCaptions(
+        [...segmentsRef.current.values()].sort((a, b) => a.at - b.at).slice(-6),
+      );
+    };
+    const isLocalTrack = (sid: string | undefined) =>
+      !!sid && room.localParticipant.trackPublications.has(sid);
+    room.registerTextStreamHandler("lk.transcription", async (reader, from) => {
+      const attrs = reader.info.attributes ?? {};
+      const id = attrs["lk.segment_id"] ?? reader.info.id;
+      const role: Caption["role"] =
+        from.identity === room.localParticipant.identity ||
+        isLocalTrack(attrs["lk.transcribed_track_id"])
+          ? "caller"
+          : "agent";
+      let text = "";
+      for await (const chunk of reader) {
+        text += chunk;
+        upsert(id, role, text);
+      }
+    });
+    room.on(
+      RoomEvent.TranscriptionReceived,
+      (segments: TranscriptionSegment[], participant?: Participant) => {
+        const role: Caption["role"] =
+          participant?.identity === room.localParticipant.identity
+            ? "caller"
+            : "agent";
+        for (const seg of segments) upsert(seg.id, role, seg.text);
+      },
+    );
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
       setNeedsAudioTap(!room.canPlaybackAudio);
     });
@@ -264,6 +337,19 @@ export function CallButton() {
         <a className={styles.resultLink} href={`/dashboard/calls/${resultId}`}>
           See how your call was classified →
         </a>
+      ) : null}
+      {captions.length && (status === "live" || status === "processing") ? (
+        <div className={styles.captions} aria-live="polite">
+          {captions.map((c, i) => (
+            <p
+              key={i}
+              className={c.role === "agent" ? styles.capAgent : styles.capYou}
+            >
+              <strong>{c.role === "agent" ? "Assistant" : "You"}:</strong>{" "}
+              {c.text}
+            </p>
+          ))}
+        </div>
       ) : null}
       <div ref={audioRef} hidden />
     </div>
