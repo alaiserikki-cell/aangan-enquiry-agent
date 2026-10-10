@@ -1,0 +1,207 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1060" width="1600" height="1060" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .zone { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; rx: 18; }
+      .zt { font-size: 15px; font-weight: 700; fill: #334155; letter-spacing: .06em; }
+      .box { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.5; rx: 10; }
+      .ext { fill: #eef2ff; stroke: #6366f1; }
+      .db { fill: #ecfdf5; stroke: #10b981; }
+      .ui { fill: #fff7ed; stroke: #f97316; }
+      .h { font-size: 15px; font-weight: 700; fill: #0f172a; }
+      .t { font-size: 12px; fill: #475569; }
+      .m { font-size: 11px; fill: #64748b; font-family: Consolas, monospace; }
+      .ln { stroke: #475569; stroke-width: 1.6; fill: none; marker-end: url(#a); }
+      .dash { stroke-dasharray: 6 5; }
+      .lab { font-size: 11.5px; fill: #1e293b; }
+      .labbg { fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1060" fill="#ffffff"/>
+  <text x="40" y="52" font-size="28" font-weight="700" fill="#0f172a">Aangan Studio enquiry agent: component map</text>
+  <text x="40" y="78" font-size="14" fill="#64748b">Next.js on Vercel (sin1) · Neon Postgres · Vaani voice agent · Gemini classification · Cal.com booking · Resend email · HubSpot CRM</text>
+
+  <!-- Zones -->
+  <rect class="zone" x="30" y="105" width="330" height="905"/>
+  <text class="zt" x="50" y="133">CALLERS &amp; USERS</text>
+  <rect class="zone" x="390" y="105" width="300" height="905"/>
+  <text class="zt" x="410" y="133">VOICE (VAANI)</text>
+  <rect class="zone" x="720" y="105" width="540" height="905"/>
+  <text class="zt" x="740" y="133">APP ON VERCEL (NEXT.JS)</text>
+  <rect class="zone" x="1290" y="105" width="280" height="905"/>
+  <text class="zt" x="1310" y="133">DATA &amp; SERVICES</text>
+
+  <!-- Callers -->
+  <rect class="box ui" x="55" y="160" width="280" height="88"/>
+  <text class="h" x="70" y="186">Phone caller</text>
+  <text class="t" x="70" y="206">Dials the studio number</text>
+  <text class="t" x="70" y="224">(needs a Vaani number: not set up yet)</text>
+
+  <rect class="box ui" x="55" y="272" width="280" height="110"/>
+  <text class="h" x="70" y="298">Web caller (home page)</text>
+  <text class="t" x="70" y="318">"Talk to the Aangan assistant" button</text>
+  <text class="m" x="70" y="338">src/app/call-button.tsx</text>
+  <text class="t" x="70" y="358">Mic + live captions (LiveKit client)</text>
+
+  <rect class="box ui" x="55" y="406" width="280" height="96"/>
+  <text class="h" x="70" y="432">Designer (email)</text>
+  <text class="t" x="70" y="452">Gets the lead brief, clicks</text>
+  <text class="t" x="70" y="470">"I've got this" to acknowledge</text>
+
+  <rect class="box ui" x="55" y="526" width="280" height="110"/>
+  <text class="h" x="70" y="552">Nikhil / mentor</text>
+  <text class="t" x="70" y="572">Dashboard on phone, daily digest,</text>
+  <text class="t" x="70" y="590">urgent + review + compliance emails</text>
+  <text class="m" x="70" y="612">/dashboard · /dashboard/test</text>
+
+  <!-- Vaani -->
+  <rect class="box ext" x="410" y="160" width="260" height="150"/>
+  <text class="h" x="425" y="186">Vaani voice agent</text>
+  <text class="t" x="425" y="206">STT Deepgram nova-3 · LLM Gemini</text>
+  <text class="t" x="425" y="224">TTS · system prompt + guardrails</text>
+  <text class="m" x="425" y="246">agent/vaani-system-prompt.md</text>
+  <text class="t" x="425" y="270">Never quotes prices; books only</text>
+  <text class="t" x="425" y="288">after checks 1–3 pass</text>
+
+  <rect class="box ext" x="410" y="334" width="260" height="88"/>
+  <text class="h" x="425" y="360">LiveKit room (WebRTC)</text>
+  <text class="t" x="425" y="380">server.vaanivoice.ai · LiveKit 1.9</text>
+  <text class="t" x="425" y="398">audio both ways + transcriptions</text>
+
+  <rect class="box ext" x="410" y="446" width="260" height="120"/>
+  <text class="h" x="425" y="472">Vaani APIs</text>
+  <text class="m" x="425" y="494">POST /api/trigger-call (webrtc)</text>
+  <text class="m" x="425" y="512">GET  /api/transcript/{id}</text>
+  <text class="m" x="425" y="530">PATCH /api/agent/{id}/persona</text>
+  <text class="t" x="425" y="552">Webhook: call_started/ended/post</text>
+
+  <rect class="box ext" x="410" y="590" width="260" height="96"/>
+  <text class="h" x="425" y="616">Custom tools (mid-call)</text>
+  <text class="t" x="425" y="636">check_availability · book_consultation</text>
+  <text class="t" x="425" y="654">Bearer VAANI_TOOL_SECRET</text>
+  <text class="t" x="425" y="672">(to be added in Vaani UI)</text>
+
+  <!-- App -->
+  <rect class="box" x="740" y="160" width="245" height="120"/>
+  <text class="h" x="755" y="186">Web-call API</text>
+  <text class="m" x="755" y="208">/api/webcall</text>
+  <text class="t" x="755" y="226">start call · caps 3 min, 8/day, 20 total</text>
+  <text class="m" x="755" y="248">/api/webcall/finish</text>
+  <text class="t" x="755" y="266">pull transcript → process</text>
+
+  <rect class="box" x="995" y="160" width="245" height="120"/>
+  <text class="h" x="1010" y="186">Vaani webhook</text>
+  <text class="m" x="1010" y="208">/api/webhooks/vaani</text>
+  <text class="t" x="1010" y="226">HMAC signature check</text>
+  <text class="t" x="1010" y="244">store raw first · idempotent</text>
+  <text class="m" x="1010" y="266">src/lib/vaani/adapter.ts</text>
+
+  <rect class="box" x="740" y="300" width="500" height="88"/>
+  <text class="h" x="755" y="326">Mid-call tools</text>
+  <text class="m" x="755" y="348">/api/tools/availability · /api/tools/book</text>
+  <text class="t" x="755" y="368">3 slots in 7 days · one booking per call · &lt;2 s or fallback "designer calls in 2 hours"</text>
+
+  <rect class="box" x="740" y="408" width="500" height="100"/>
+  <text class="h" x="755" y="434">Classification</text>
+  <text class="m" x="755" y="456">src/lib/classify (schema · rules · gemini)</text>
+  <text class="t" x="755" y="476">Transcript + rule table → strict JSON: outcome, reason, fields, flags,</text>
+  <text class="t" x="755" y="494">pricing, agent rule breaks, confidence (&lt; 0.7 → needs_review)</text>
+
+  <rect class="box" x="740" y="528" width="500" height="132"/>
+  <text class="h" x="755" y="554">Routing</text>
+  <text class="m" x="755" y="576">src/lib/route (plan · process-call)</text>
+  <text class="t" x="755" y="596">qualified → HubSpot deal + designer handoff email (round-robin by area)</text>
+  <text class="t" x="755" y="614">existing_client → [URGENT] email · needs_review → email Nikhil</text>
+  <text class="t" x="755" y="632">price quoted / rule broken → incident + email · dropped → call-back list</text>
+  <text class="t" x="755" y="650">price guard blocks any price in emails, deals, dashboard</text>
+
+  <rect class="box" x="740" y="680" width="245" height="112"/>
+  <text class="h" x="755" y="706">Acknowledge link</text>
+  <text class="m" x="755" y="728">/api/ack/[token]</text>
+  <text class="t" x="755" y="748">single use · 7-day expiry</text>
+  <text class="t" x="755" y="766">records acknowledged_at</text>
+
+  <rect class="box" x="995" y="680" width="245" height="112"/>
+  <text class="h" x="1010" y="706">Crons</text>
+  <text class="t" x="1010" y="728">every 15 min: unacknowledged</text>
+  <text class="t" x="1010" y="746">leads after 2 h → Nikhil</text>
+  <text class="t" x="1010" y="764">8:45 IST digest · hourly HubSpot</text>
+  <text class="m" x="1010" y="784">vercel.json + GitHub Actions</text>
+
+  <rect class="box" x="740" y="812" width="500" height="112"/>
+  <text class="h" x="755" y="838">Dashboard (public, phone numbers masked)</text>
+  <text class="m" x="755" y="860">/dashboard · /dashboard/calls/[id] · /dashboard/test</text>
+  <text class="t" x="755" y="880">calls, outcomes, decline reasons, bookings, handoff &amp; ack times,</text>
+  <text class="t" x="755" y="898">pricing asks, compliance, cost per call / per lead, pipeline, call-back list</text>
+
+  <!-- Data & services -->
+  <rect class="box db" x="1310" y="160" width="240" height="190"/>
+  <text class="h" x="1325" y="186">Neon Postgres</text>
+  <text class="m" x="1325" y="208">calls · designers · handoffs</text>
+  <text class="m" x="1325" y="226">emails · incidents</text>
+  <text class="m" x="1325" y="244">hubspot_sync · web_calls</text>
+  <text class="m" x="1325" y="262">webhook_events</text>
+  <text class="t" x="1325" y="290">region aws-ap-southeast-1</text>
+  <text class="t" x="1325" y="308">(next to Vercel sin1)</text>
+
+  <rect class="box ext" x="1310" y="372" width="240" height="88"/>
+  <text class="h" x="1325" y="398">Google Gemini</text>
+  <text class="t" x="1325" y="418">gemini-3.8-flash</text>
+  <text class="t" x="1325" y="436">fallback gemini-3.5-flash</text>
+
+  <rect class="box ext" x="1310" y="482" width="240" height="88"/>
+  <text class="h" x="1325" y="508">Cal.com</text>
+  <text class="t" x="1325" y="528">slots + bookings on the</text>
+  <text class="t" x="1325" y="546">assigned designer's calendar</text>
+
+  <rect class="box ext" x="1310" y="592" width="240" height="88"/>
+  <text class="h" x="1325" y="618">Resend</text>
+  <text class="t" x="1325" y="638">all email · test mode sends</text>
+  <text class="t" x="1325" y="656">everything to the test inbox</text>
+
+  <rect class="box ext" x="1310" y="702" width="240" height="88"/>
+  <text class="h" x="1325" y="728">HubSpot (free CRM)</text>
+  <text class="t" x="1325" y="748">contact + deal "Consultation</text>
+  <text class="t" x="1325" y="766">booked", never an amount</text>
+
+  <!-- Arrows (short, adjacent only; the full sequence is in the flow panel) -->
+  <path class="ln dash" d="M335,204 H410"/>
+  <path class="ln" d="M335,340 C372,340 372,378 410,378"/>
+  <path class="ln" d="M540,334 V312"/>
+  <path class="ln" d="M670,500 C705,500 705,250 740,250"/>
+  <path class="ln" d="M670,638 C705,638 705,344 740,344"/>
+  <path class="ln" d="M990,508 V528"/>
+  <path class="ln" d="M1240,236 H1310"/>
+  <path class="ln" d="M1240,458 H1310"/>
+  <path class="ln" d="M1240,360 C1275,360 1275,526 1310,526"/>
+  <path class="ln" d="M1240,596 C1275,596 1275,636 1310,636"/>
+  <path class="ln" d="M1240,626 C1282,626 1270,746 1310,746"/>
+  <path class="ln" d="M1118,792 V812"/>
+
+  <!-- Flow panel -->
+  <rect x="55" y="700" width="615" height="305" rx="12" fill="#ffffff" stroke="#0f172a" stroke-width="1.5"/>
+  <text class="h" x="75" y="730">How one call flows</text>
+  <g class="t" font-size="12.5">
+    <text x="75" y="758"><tspan font-weight="700">1.</tspan> Caller presses the button (or dials). The app asks Vaani for a session: /api/webcall.</text>
+    <text x="75" y="784"><tspan font-weight="700">2.</tspan> Browser joins the LiveKit room. Caller and agent talk; captions show both sides.</text>
+    <text x="75" y="810"><tspan font-weight="700">3.</tspan> If the caller qualifies, the agent calls the tools: 3 open slots, then books one</text>
+    <text x="92" y="828">on the assigned designer's Cal.com calendar.</text>
+    <text x="75" y="854"><tspan font-weight="700">4.</tspan> Call ends. Transcript arrives via the signed Vaani webhook, or the app pulls it</text>
+    <text x="92" y="872">(/api/webcall/finish). Raw payload is stored first; processing is idempotent.</text>
+    <text x="75" y="898"><tspan font-weight="700">5.</tspan> Gemini classifies against the rule table; low confidence goes to needs_review.</text>
+    <text x="75" y="924"><tspan font-weight="700">6.</tspan> Routing: HubSpot deal + designer email, urgent / review / compliance emails to</text>
+    <text x="92" y="942">Nikhil, or the call-back list. A price guard blocks any price in outgoing text.</text>
+    <text x="75" y="968"><tspan font-weight="700">7.</tspan> Designer clicks "I've got this" (/api/ack). If not within 2 hours, a cron emails Nikhil.</text>
+    <text x="75" y="994"><tspan font-weight="700">8.</tspan> Everything lands on the dashboard: outcomes, timings, cost per lead, compliance.</text>
+  </g>
+
+  <!-- Legend -->
+  <rect x="40" y="1022" width="14" height="14" fill="#fff7ed" stroke="#f97316"/><text class="t" x="60" y="1034">People / browser</text>
+  <rect x="190" y="1022" width="14" height="14" fill="#eef2ff" stroke="#6366f1"/><text class="t" x="210" y="1034">External service</text>
+  <rect x="340" y="1022" width="14" height="14" fill="#ffffff" stroke="#94a3b8"/><text class="t" x="360" y="1034">Our code (Next.js on Vercel)</text>
+  <rect x="540" y="1022" width="14" height="14" fill="#ecfdf5" stroke="#10b981"/><text class="t" x="560" y="1034">Database</text>
+  <line x1="660" y1="1029" x2="700" y2="1029" class="ln dash"/><text class="t" x="708" y="1034">Not live yet</text>
+</svg>

@@ -134,7 +134,12 @@ export function CallButton() {
     setNeedsAudioTap(false);
     setStatus("starting");
     // Create the room inside the click so the browser lets it play the assistant's voice.
-    const room = new Room({ adaptiveStream: true });
+    // Vaani runs LiveKit server 1.9, which has no single-peer-connection endpoint; the client's
+    // fallback from that mode times out and reconnects every ~15 s (no audio either way).
+    const room = new Room({
+      adaptiveStream: true,
+      singlePeerConnection: false,
+    });
     roomRef.current = room;
     void room.startAudio().catch(() => {});
     try {
@@ -180,7 +185,9 @@ export function CallButton() {
     };
     const isLocalTrack = (sid: string | undefined) =>
       !!sid && room.localParticipant.trackPublications.has(sid);
+    let textStreams = false; // newer agents send text streams; older ones TranscriptionReceived
     room.registerTextStreamHandler("lk.transcription", async (reader, from) => {
+      textStreams = true;
       const attrs = reader.info.attributes ?? {};
       const id = attrs["lk.segment_id"] ?? reader.info.id;
       const role: Caption["role"] =
@@ -197,6 +204,7 @@ export function CallButton() {
     room.on(
       RoomEvent.TranscriptionReceived,
       (segments: TranscriptionSegment[], participant?: Participant) => {
+        if (textStreams) return;
         const role: Caption["role"] =
           participant?.identity === room.localParticipant.identity
             ? "caller"
