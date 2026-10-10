@@ -24,6 +24,10 @@ export function CallButton() {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [resultId, setResultId] = useState<string | null>(null);
+  const [youSpeaking, setYouSpeaking] = useState(false);
+  const [heardYou, setHeardYou] = useState(false);
+  const [needsAudioTap, setNeedsAudioTap] = useState(false);
+  const [liveSeconds, setLiveSeconds] = useState(0);
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<HTMLDivElement>(null);
 
@@ -40,6 +44,7 @@ export function CallButton() {
   useEffect(() => {
     if (status !== "live") return;
     const t = setInterval(() => {
+      setLiveSeconds((n) => n + 1);
       setSecondsLeft((s) => {
         if (s <= 1) {
           roomRef.current?.disconnect();
@@ -86,7 +91,14 @@ export function CallButton() {
   async function start() {
     setMessage(null);
     setResultId(null);
+    setHeardYou(false);
+    setLiveSeconds(0);
+    setNeedsAudioTap(false);
     setStatus("starting");
+    // Create the room inside the click so the browser lets it play the assistant's voice.
+    const room = new Room({ adaptiveStream: true });
+    roomRef.current = room;
+    void room.startAudio().catch(() => {});
     try {
       // Ask for the microphone first so a blocked mic doesn't spend a call.
       const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -112,16 +124,22 @@ export function CallButton() {
       return;
     }
 
-    const room = new Room({ adaptiveStream: true });
-    roomRef.current = room;
     room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
-      if (track.kind === Track.Kind.Audio)
-        audioRef.current?.appendChild(track.attach());
+      if (track.kind !== Track.Kind.Audio) return;
+      const el = track.attach();
+      el.autoplay = true;
+      audioRef.current?.appendChild(el);
+      el.play().catch(() => setNeedsAudioTap(true));
+    });
+    room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      setNeedsAudioTap(!room.canPlaybackAudio);
     });
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-      setAgentSpeaking(
-        speakers.some((p) => p.identity !== room.localParticipant.identity),
-      );
+      const me = room.localParticipant.identity;
+      setAgentSpeaking(speakers.some((p) => p.identity !== me));
+      const speaking = speakers.some((p) => p.identity === me);
+      setYouSpeaking(speaking);
+      if (speaking) setHeardYou(true);
     });
     let connectedAt = 0;
     room.on(RoomEvent.Disconnected, () => {
@@ -141,7 +159,13 @@ export function CallButton() {
 
     try {
       await room.connect(data.connectionUrl, data.token);
-      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setMicrophoneEnabled(true, {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      });
+      await room.startAudio().catch(() => {});
+      setNeedsAudioTap(!room.canPlaybackAudio);
       connectedAt = Date.now();
       setSecondsLeft((data.maxMinutes ?? 3) * 60);
       setStatus("live");
@@ -172,12 +196,34 @@ export function CallButton() {
             <span>
               {agentSpeaking
                 ? "Assistant is speaking…"
-                : "Listening, go ahead and speak"}
+                : youSpeaking
+                  ? "Hearing you…"
+                  : "Listening, go ahead and speak"}
             </span>
             <span className={styles.timer} aria-label="Time left">
               {mm}:{ss}
             </span>
           </div>
+          {needsAudioTap ? (
+            <button
+              type="button"
+              className={styles.callBtn}
+              onClick={() => {
+                void roomRef.current
+                  ?.startAudio()
+                  .then(() => setNeedsAudioTap(false));
+              }}
+            >
+              Tap to hear the assistant
+            </button>
+          ) : null}
+          {!heardYou && liveSeconds >= 8 ? (
+            <p className={styles.callNote}>
+              We can&apos;t hear you yet. Check that the right microphone is
+              selected (the mic icon in your browser&apos;s address bar) and
+              that it isn&apos;t muted.
+            </p>
+          ) : null}
           <button
             type="button"
             className={styles.endBtn}
