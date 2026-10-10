@@ -3,7 +3,7 @@
 
 import { createBooking, getSlots, pickSlots } from "./calcom";
 import { sql, sqlOne } from "./db";
-import { getDesigner, markAssigned, pickDesigner } from "./designers";
+import { chooseDesigner, getDesigner, listDesigners, markAssigned, pickDesigner } from "./designers";
 import { log } from "./log";
 import { formatIstSpoken } from "./time";
 import type { Designer, NormalizedToolCall } from "./types";
@@ -90,15 +90,21 @@ async function designerFor(call: { designer_id: string | null } | null, location
 export function checkAvailability(tool: NormalizedToolCall): Promise<ToolResult> {
   return withDeadline(tool, "availability", async (deadline) => {
     const location = str(tool.args.location);
-    const call = await ensureCallRow(tool);
-    const designer = await designerFor(call, location);
-    if (call && call.designer_id !== designer.id) {
-      // Tentative: the round-robin pointer only moves when a booking is made.
-      await sql`update calls set designer_id = ${designer.id} where id = ${call.id}`;
-    }
+    // Latency budget is 2 s: fetch the call row and the designer list together, then start the
+    // Cal.com request without waiting on the bookkeeping write.
+    const [call, designers] = await Promise.all([ensureCallRow(tool), listDesigners()]);
+    const current = call?.designer_id ? designers.find((d) => d.id === call.designer_id && d.active && d.calcom_event_type_id != null) : undefined;
+    const designer = current ?? chooseDesigner(designers, location, { requireCalendar: true });
+    if (!designer) throw new Error("No active designer with a Cal.com event type");
 
     const now = new Date();
-    const all = await getSlots(designer.calcom_event_type_id!, now, new Date(now.getTime() + 7 * 864e5), remaining(deadline));
+    const slotsPromise = getSlots(designer.calcom_event_type_id!, now, new Date(now.getTime() + 7 * 864e5), remaining(deadline));
+    const pin =
+      call && call.designer_id !== designer.id
+        ? // Tentative: the round-robin pointer only moves when a booking is made.
+          sql`update calls set designer_id = ${designer.id} where id = ${call.id}`
+        : Promise.resolve();
+    const [all] = await Promise.all([slotsPromise, pin]);
     const slots = pickSlots(all, 3).map((start) => ({ start, spoken: formatIstSpoken(start) }));
     if (!slots.length) throw new Error("No open slots in the next 7 days");
 
