@@ -15,7 +15,8 @@ import {
 import { demoCallbacks, demoDesigners, demoPipeline, demoRange, isDemo } from "@/lib/demo";
 import { hubspotEnabled } from "@/lib/hubspot";
 import { computeMetrics, designerMap, loadCallbacks, loadPipeline, loadRange } from "@/lib/metrics";
-import { redactForDisplay } from "@/lib/price-guard";
+import { maskPhones, redactForDisplay } from "@/lib/price-guard";
+import { isDashboardPublic } from "@/lib/auth";
 import { requireSession } from "@/lib/require-session";
 import { formatDuration, formatIst, isAfterHours, istRange, type RangeKey } from "@/lib/time";
 import { markCalledBack } from "./actions";
@@ -420,7 +421,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                     {callbacks.map((c) => (
                       <tr key={c.id}>
                         <td>
-                          <a href={`tel:${c.caller_phone}`}>{c.caller_phone}</a>
+                          {isDashboardPublic() ? maskPhones(c.caller_phone ?? "") : <a href={`tel:${c.caller_phone}`}>{c.caller_phone}</a>}
                           <div className={styles.muted}>{formatIst(c.started_at ?? c.created_at)}</div>
                         </td>
                         <td style={{ textAlign: "right" }}>

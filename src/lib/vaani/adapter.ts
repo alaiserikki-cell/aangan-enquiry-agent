@@ -142,3 +142,40 @@ export function parseToolCall(payload: unknown): NormalizedToolCall {
 export function toToolResponse(result: { ok: boolean; message: string; data?: unknown }): unknown {
   return { ok: result.ok, message: result.message, data: result.data ?? null };
 }
+
+// ---------------------------------------------------------------------------
+// In-browser web calls (POST /api/trigger-call/ with medium "webrtc").
+// Returns a short-lived LiveKit token; the browser joins the room with livekit-client.
+
+export interface WebCallSession {
+  token: string;
+  connectionUrl: string;
+  roomName: string;
+}
+
+export async function startWebCall(opts: { maxMinutes: number; greeting: string }): Promise<WebCallSession> {
+  const apiKey = process.env.VAANI_API_KEY;
+  // Not a secret (useless without the API key); default lets the deployed app work without another env var.
+  const agentId = process.env.VAANI_AGENT_ID || "2ac6c163-7d11-4eb9-9b67-5338719fdd52";
+  if (!apiKey || !agentId) throw new VaaniNotConfiguredError("VAANI_API_KEY / VAANI_AGENT_ID not set");
+  const res = await fetch("https://api.vaanivoice.ai/api/trigger-call/", {
+    method: "POST",
+    headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_id: agentId,
+      medium: "webrtc",
+      primary_language: "en",
+      secondary_language: "hi",
+      welcome_message: opts.greeting,
+      welcome_interruptible: true,
+      modify_agent: { experience: { settings: { call_settings: { max_call_duration: opts.maxMinutes } } } },
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Vaani web call ${res.status}: ${text.slice(0, 200)}`);
+  const j = JSON.parse(text) as Record<string, unknown>;
+  const token = str(j.token), connectionUrl = str(j.connection_url), roomName = str(j.room_name);
+  if (!token || !connectionUrl || !roomName) throw new Error("Vaani web call: missing token/connection_url/room_name");
+  return { token, connectionUrl, roomName };
+}

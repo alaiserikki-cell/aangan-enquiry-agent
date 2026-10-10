@@ -8,6 +8,7 @@ import { requireSession } from "@/lib/require-session";
 import { SCENARIOS, parseSimTranscript } from "@/lib/sim-scenarios";
 
 const MAX_TRANSCRIPT_CHARS = 20_000;
+const MAX_RUNS_PER_HOUR = 30;
 
 /**
  * Free test run: push a transcript through the same pipeline a real Vaani call uses
@@ -17,6 +18,10 @@ const MAX_TRANSCRIPT_CHARS = 20_000;
  */
 export async function runSimulation(formData: FormData) {
   await requireSession();
+
+  // Public page: cap runs so nobody can drain the Gemini / Resend free quotas.
+  const recent = await sqlOne<{ n: number }>`select count(*)::int as n from calls where provider = 'simulator' and created_at > now() - interval '1 hour'`;
+  if ((recent?.n ?? 0) >= MAX_RUNS_PER_HOUR) redirect("/dashboard/test?error=limit");
 
   const scenario = SCENARIOS.find((s) => s.id === String(formData.get("scenario") ?? ""));
   const pasted = String(formData.get("transcript") ?? "").slice(0, MAX_TRANSCRIPT_CHARS);

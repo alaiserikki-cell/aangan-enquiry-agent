@@ -4,7 +4,8 @@ import type { StoredClassification } from "@/lib/classify/schema";
 import { sql, sqlOne } from "@/lib/db";
 import { demoCall, demoDesigners, demoHandoff, isDemo } from "@/lib/demo";
 import { getDesigner } from "@/lib/designers";
-import { redactForDisplay } from "@/lib/price-guard";
+import { isDashboardPublic } from "@/lib/auth";
+import { maskPhones, redactForDisplay } from "@/lib/price-guard";
 import { requireSession } from "@/lib/require-session";
 import { formatDuration, formatIst } from "@/lib/time";
 import type { CallRow } from "@/lib/types";
@@ -74,12 +75,12 @@ export default async function CallPage({ params, searchParams }: PageProps<"/das
         sql<{ type: string }>`select type from incidents where call_id = ${id}`,
       ]);
   const c = call.classification as StoredClassification | null;
-  const r = (s: string | null | undefined) => (s ? redactForDisplay(s) : "–");
+  const r = (s: string | null | undefined) => (s ? (isDashboardPublic() ? maskPhones(redactForDisplay(s)) : redactForDisplay(s)) : "–");
 
   const rows: [string, React.ReactNode][] = [
     ["When", formatIst(call.started_at ?? call.created_at, { withYear: true })],
     ["Duration", formatDuration(call.duration_seconds)],
-    ["Caller number", call.caller_phone ? <a href={`tel:${call.caller_phone}`}>{call.caller_phone}</a> : "–"],
+    ["Caller number", call.caller_phone ? (isDashboardPublic() ? maskPhones(call.caller_phone) : <a href={`tel:${call.caller_phone}`}>{call.caller_phone}</a>) : "–"],
     ["Outcome", c ? `${c.outcome}${c.decline_reason ? ` (${c.decline_reason})` : ""}` : call.status],
     ...(c?.review_reason ? ([["Why review", r(c.review_reason)]] as [string, React.ReactNode][]) : []),
     ["Confidence", c ? c.confidence.toFixed(2) : "–"],
@@ -143,7 +144,7 @@ export default async function CallPage({ params, searchParams }: PageProps<"/das
         {(call.transcript ?? []).length ? (
           call.transcript!.map((t, i) => (
             <div key={i} className={`${styles.turn} ${t.role === "agent" ? styles.agent : styles.caller}`}>
-              {redactForDisplay(t.text)}
+              {isDashboardPublic() ? maskPhones(redactForDisplay(t.text)) : redactForDisplay(t.text)}
             </div>
           ))
         ) : (

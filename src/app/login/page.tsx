@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE, SESSION_MAX_AGE, constantTimeEqual, sessionToken } from "@/lib/auth";
+import { SESSION_COOKIE, SESSION_MAX_AGE, constantTimeEqual, isDashboardPublic, sessionToken } from "@/lib/auth";
 import styles from "../dashboard/dashboard.module.css";
 
 async function login(formData: FormData) {
@@ -21,6 +21,7 @@ async function login(formData: FormData) {
 }
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  if (isDashboardPublic()) redirect("/dashboard");
   const sp = await searchParams;
   const next = typeof sp.next === "string" ? sp.next : "/dashboard";
   return (

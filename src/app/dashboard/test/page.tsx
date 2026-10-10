@@ -39,7 +39,8 @@ export default async function TestPage({ searchParams }: PageProps<"/dashboard/t
       </div>
 
       {sp.cleared ? <p className={styles.ok}>All test calls removed.</p> : null}
-      {sp.error ? <p className={styles.error}>That transcript needs at least two lines starting with &quot;Agent:&quot; or &quot;Caller:&quot;.</p> : null}
+      {sp.error === "limit" ? <p className={styles.error}>Test-run limit reached (30 per hour). Please try again later.</p> : null}
+      {sp.error && sp.error !== "limit" ? <p className={styles.error}>That transcript needs at least two lines starting with &quot;Agent:&quot; or &quot;Caller:&quot;.</p> : null}
 
       <section className={styles.widget}>
         <header className={styles.widgetHead}>

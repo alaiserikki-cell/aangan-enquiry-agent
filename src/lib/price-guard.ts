@@ -63,3 +63,15 @@ export function assertSafeToSend(text: string, where: string): void {
   const hits = [...findPriceFigures(clean), ...findSensitiveIds(clean)];
   if (hits.length) throw new BlockedContentError(where, hits);
 }
+
+/** Phone-like digit runs (7+ digits, spaces/dashes allowed) → keep the first 5 and last 2 digits. */
+const PHONE_RUN = /\+?\d[\d\s-]{6,}\d/g;
+
+export function maskPhones(text: string): string {
+  return text.replace(PHONE_RUN, (m) => {
+    const digits = m.replace(/\D/g, "");
+    if (digits.length < 7) return m;
+    const head = m.startsWith("+") ? `+${digits.slice(0, Math.min(7, digits.length - 4))}` : digits.slice(0, 5);
+    return `${head}•••${digits.slice(-2)}`;
+  });
+}

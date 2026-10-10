@@ -1,6 +1,14 @@
 // Single-password dashboard auth. The cookie holds an HMAC derived from DASHBOARD_PASSWORD,
 // so changing the password logs everyone out. Web Crypto only, so it runs in proxy.ts too.
 
+/**
+ * The dashboard is public by default (no password). Set DASHBOARD_PRIVATE=true to require
+ * DASHBOARD_PASSWORD again. While public, personal data (phone numbers) is masked on screen.
+ */
+export function isDashboardPublic(): boolean {
+  return process.env.DASHBOARD_PRIVATE !== "true";
+}
+
 export const SESSION_COOKIE = "aangan_dash";
 export const SESSION_MAX_AGE = 30 * 24 * 60 * 60;
 
