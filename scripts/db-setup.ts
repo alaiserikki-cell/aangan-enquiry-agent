@@ -1,20 +1,21 @@
 /**
- * Apply db/0001_init.sql and db/seed.sql to the database in DATABASE_URL_UNPOOLED
- * (falls back to DATABASE_URL).
+ * Apply every db/NNNN_*.sql migration not yet applied, then seed designers if empty.
  *
  *   npm run db:setup
  *
- * Safe to re-run: skips the schema if the tables already exist and only seeds
- * designers when the table is empty. Uses a WebSocket Pool (not the HTTP driver)
- * because the files contain multiple statements and a $$-quoted function.
+ * Uses DATABASE_URL_UNPOOLED (direct connection, as Neon recommends for schema changes),
+ * falling back to DATABASE_URL. Each migration runs in a transaction and is recorded in
+ * schema_migrations, so the script is safe to re-run. Uses a WebSocket Pool (not the HTTP
+ * driver) because migration files contain multiple statements and $$-quoted functions.
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pool } from "@neondatabase/serverless";
 
+const DB_DIR = join(__dirname, "..", "db");
+
 async function main() {
-  // Schema changes go over the direct (non-pooled) connection; the app itself uses the pooled one.
   const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL_UNPOOLED / DATABASE_URL is not set (put it in .env.local)");
 
@@ -24,21 +25,37 @@ async function main() {
     const { rows: [ver] } = await client.query<{ v: string }>("select version() as v");
     console.log(`Connected: ${ver.v.split(",")[0]}`);
 
-    const { rows: [exists] } = await client.query<{ t: string | null }>("select to_regclass('public.calls')::text as t");
-    if (exists.t) {
-      console.log("Schema already present, skipping db/0001_init.sql");
-    } else {
+    await client.query("create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now())");
+
+    // Databases created before migration tracking already have 0001 applied.
+    const { rows: [legacy] } = await client.query<{ t: string | null }>("select to_regclass('public.calls')::text as t");
+    if (legacy.t) await client.query("insert into schema_migrations (name) values ('0001_init.sql') on conflict do nothing");
+
+    const applied = new Set((await client.query<{ name: string }>("select name from schema_migrations")).rows.map((r) => r.name));
+    const files = readdirSync(DB_DIR).filter((f) => /^\d{4}_.+\.sql$/.test(f)).sort();
+
+    for (const file of files) {
+      if (applied.has(file)) {
+        console.log(`  ✓ ${file} (already applied)`);
+        continue;
+      }
       await client.query("begin");
-      await client.query(readFileSync(join(__dirname, "..", "db", "0001_init.sql"), "utf8"));
-      await client.query("commit");
-      console.log("Applied db/0001_init.sql");
+      try {
+        await client.query(readFileSync(join(DB_DIR, file), "utf8"));
+        await client.query("insert into schema_migrations (name) values ($1)", [file]);
+        await client.query("commit");
+        console.log(`  + ${file} applied`);
+      } catch (err) {
+        await client.query("rollback");
+        throw new Error(`${file}: ${err instanceof Error ? err.message : err}`);
+      }
     }
 
     const { rows: [count] } = await client.query<{ n: number }>("select count(*)::int as n from designers");
     if (count.n > 0) {
       console.log(`Designers table has ${count.n} row(s), skipping seed`);
     } else {
-      await client.query(readFileSync(join(__dirname, "..", "db", "seed.sql"), "utf8"));
+      await client.query(readFileSync(join(DB_DIR, "seed.sql"), "utf8"));
       console.log("Applied db/seed.sql");
     }
 
@@ -46,9 +63,6 @@ async function main() {
       "select table_name from information_schema.tables where table_schema = 'public' order by table_name",
     );
     console.log(`Tables: ${tables.map((t) => t.table_name).join(", ")}`);
-  } catch (err) {
-    await client.query("rollback").catch(() => {});
-    throw err;
   } finally {
     client.release();
     await pool.end();
@@ -56,6 +70,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("db:setup failed:", err instanceof Error ? err.message : err);
+  console.error("db:setup failed:", String(err instanceof Error ? err.message : err).replace(/npg_[A-Za-z0-9]+/g, "[redacted]"));
   process.exit(1);
 });
