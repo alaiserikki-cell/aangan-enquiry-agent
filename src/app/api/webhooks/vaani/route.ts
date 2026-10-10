@@ -15,6 +15,18 @@ import {
 
 export const maxDuration = 60;
 
+/** Events that change data. Only these are ever rejected loudly; anything else unsigned is a harmless ping. */
+const REAL_EVENTS = new Set(["call_started", "call_ended", "call_postprocessing"]);
+
+function safeEventName(raw: string): string | null {
+  try {
+    const e = (JSON.parse(raw) as { event?: unknown }).event;
+    return typeof e === "string" ? e.slice(0, 40) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Vaani agent webhook. Every event: verify signature → store raw (idempotent on event+call) → 2xx.
  *   call_started         → open/attach the call row and record the caller's number
@@ -26,7 +38,19 @@ export async function POST(req: Request) {
   const raw = await req.text();
 
   try {
-    if (!verifyWebhookSignature(raw, req.headers)) return new Response("invalid signature", { status: 401 });
+    if (!verifyWebhookSignature(raw, req.headers)) {
+      // Diagnostics only: header names and the event name, never values or the body.
+      const eventName = safeEventName(raw);
+      log.warn("vaani.webhook.bad_signature", {
+        event: eventName,
+        headers: [...req.headers.keys()].filter((k) => !/^(cookie|authorization)$/i.test(k)).join(","),
+        hasSignature: req.headers.has("x-vaani-signature"),
+        hasTimestamp: req.headers.has("x-vaani-timestamp"),
+      });
+      // Vaani's "Test" button may send an unsigned ping. Acknowledge it without storing or acting on it.
+      if (!eventName || !REAL_EVENTS.has(eventName)) return Response.json({ ok: true, ignored: "unsigned test" });
+      return new Response("invalid signature", { status: 401 });
+    }
   } catch (err) {
     if (err instanceof VaaniNotConfiguredError) return new Response(err.message, { status: 503 });
     throw err;
