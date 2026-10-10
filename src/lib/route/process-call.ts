@@ -11,7 +11,9 @@ import { getDesigner, markAssigned, pickDesigner } from "../designers";
 import { complianceEmail, existingClientEmail, handoffEmail, needsReviewEmail, policyEmail } from "../email/templates";
 import { sendEmail } from "../email/send";
 import { appUrl, env } from "../env";
+import { toInternationalPhone } from "../calcom";
 import { createDeal, hubspotEnabled, upsertContact } from "../hubspot";
+import { pendingCallKey } from "../tools";
 import { log } from "../log";
 import { BlockedContentError, redactForDisplay } from "../price-guard";
 import { formatIst, istDateKey } from "../time";
@@ -33,6 +35,7 @@ export async function processCall(callId: string): Promise<void> {
 
   try {
     const c = await ensureClassified(claimed);
+    await adoptPendingBooking(claimed, c);
     const errors: string[] = [];
     for (const action of planActions({ c, bookingStatus: claimed.booking_status, callerPhone: claimed.caller_phone })) {
       try {
@@ -50,6 +53,38 @@ export async function processCall(callId: string): Promise<void> {
     const message = String(err instanceof Error ? err.message : err).slice(0, 2000);
     await sql`update calls set status = 'failed', processing_error = ${message} where id = ${callId}`;
   }
+}
+
+/**
+ * Web calls (and any provider that doesn't send a call id to tools) leave the booking on a
+ * `pending:<phone>` row. Once the transcript tells us the caller's number, move that booking
+ * onto this call so the designer brief and dashboard show it.
+ */
+async function adoptPendingBooking(call: CallRow, c: StoredClassification): Promise<void> {
+  if (call.booking_status !== "none") return;
+  const phone = toInternationalPhone(c.fields.phone) ?? toInternationalPhone(call.caller_phone);
+  if (!phone) return;
+  const pending = await sqlOne<Pick<CallRow, "id" | "designer_id" | "booking_status" | "booking_uid" | "booking_start" | "consultation_mode">>`
+    select id, designer_id, booking_status, booking_uid, booking_start, consultation_mode from calls
+    where provider = ${call.provider} and external_id = ${pendingCallKey(phone)} and status = 'in_call'
+      and id <> ${call.id} and created_at > now() - interval '3 hours'
+    order by created_at desc limit 1`;
+  if (!pending || pending.booking_status === "none") return;
+  await sql`
+    update calls set designer_id = coalesce(designer_id, ${pending.designer_id}), booking_status = ${pending.booking_status},
+      booking_uid = ${pending.booking_uid}, booking_start = ${pending.booking_start}, consultation_mode = ${pending.consultation_mode},
+      caller_phone = coalesce(caller_phone, ${phone})
+    where id = ${call.id}`;
+  await sql`delete from calls where id = ${pending.id}`;
+  Object.assign(call, {
+    designer_id: call.designer_id ?? pending.designer_id,
+    booking_status: pending.booking_status,
+    booking_uid: pending.booking_uid,
+    booking_start: pending.booking_start,
+    consultation_mode: pending.consultation_mode,
+    caller_phone: call.caller_phone ?? phone,
+  });
+  log.info("call.adopted_pending_booking", { callId: call.id });
 }
 
 async function ensureClassified(call: CallRow): Promise<StoredClassification> {

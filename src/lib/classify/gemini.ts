@@ -31,11 +31,26 @@ ${OUTPUT_INSTRUCTIONS}`;
 
 let ai: GoogleGenAI | null = null;
 
+/** Models to try in order: the configured one, then a fallback Flash model if it stays overloaded. */
+function modelChain(): string[] {
+  const primary = geminiModel();
+  const fallback = envOptional("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash");
+  return fallback && fallback !== primary ? [primary, fallback] : [primary];
+}
+
+/** 429 / 5xx from Gemini ("high demand", rate limits) are temporary: retry, then fall back. */
+function isTransient(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  const text = String((err as Error)?.message ?? err);
+  return status === 429 || (typeof status === "number" && status >= 500) || /UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|overloaded|ECONNRESET|fetch failed/i.test(text);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const BACKOFF_MS = [1500, 4000, 9000];
+
 export async function classifyTranscript(transcriptText: string, callDateIst: string): Promise<ClassifyResult> {
   ai ??= new GoogleGenAI({ apiKey: env("GEMINI_API_KEY") });
-  const model = geminiModel();
-  const response = await ai.models.generateContent({
-    model,
+  const request = {
     contents: `Call date (IST): ${callDateIst}\n\nTRANSCRIPT\n${transcriptText}`,
     config: {
       systemInstruction: SYSTEM_PROMPT,
@@ -43,7 +58,25 @@ export async function classifyTranscript(transcriptText: string, callDateIst: st
       responseMimeType: "application/json",
       responseJsonSchema: z.toJSONSchema(ClassificationBaseSchema),
     },
-  });
+  };
+
+  let lastErr: unknown;
+  for (const model of modelChain()) {
+    for (let attempt = 0; attempt <= BACKOFF_MS.length; attempt++) {
+      try {
+        const response = await ai.models.generateContent({ model, ...request });
+        return toResult(response, model);
+      } catch (err) {
+        lastErr = err;
+        if (!isTransient(err)) throw err;
+        if (attempt < BACKOFF_MS.length) await sleep(BACKOFF_MS[attempt]);
+      }
+    }
+  }
+  throw lastErr;
+}
+
+function toResult(response: Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>, model: string): ClassifyResult {
   const rawText = response.text ?? "";
   return {
     classification: gateClassification(rawText, model),

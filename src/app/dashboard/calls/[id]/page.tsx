@@ -15,9 +15,51 @@ export const metadata = { title: "Call · Aangan Enquiries" };
 // Private, always-fresh data behind a password: a blocking render is intended.
 export const instant = false;
 
-export default async function CallPage({ params }: PageProps<"/dashboard/calls/[id]">) {
+function SimResult(p: {
+  scenarioId: string | null;
+  expected: string | null;
+  expectedReason: string | null;
+  outcome: string | null;
+  reason: string | null;
+  priceByAgent: boolean;
+  violations: string[];
+  error: string | null;
+}) {
+  const outcomeOk = p.expected ? p.outcome === p.expected : null;
+  const reasonOk = p.expectedReason ? p.reason === p.expectedReason : null;
+  const pass = outcomeOk !== false && reasonOk !== false && !p.error;
+  return (
+    <div className={styles.widget} style={{ margin: "12px 0", borderColor: p.expected ? (pass ? "var(--good)" : "var(--critical)") : undefined }}>
+      <div style={{ fontSize: 12, color: "var(--muted)" }}>Free test run{p.scenarioId ? ` · case ${p.scenarioId}` : " · pasted transcript"} · no Vaani minutes used</div>
+      {p.expected ? (
+        <div style={{ fontSize: 18, fontWeight: 600, marginTop: 4 }} className={pass ? styles.ok : styles.alert}>
+          {pass ? "✓ Pass" : "! Mismatch"}: expected {p.expected}
+          {p.expectedReason ? ` (${p.expectedReason})` : ""}, got {p.outcome ?? "nothing"}
+          {p.reason ? ` (${p.reason})` : ""}
+        </div>
+      ) : (
+        <div style={{ fontSize: 18, fontWeight: 600, marginTop: 4 }}>Result: {p.outcome ?? "not classified"}{p.reason ? ` (${p.reason})` : ""}</div>
+      )}
+      <div style={{ fontSize: 13, color: "var(--ink-2)", marginTop: 4 }}>
+        Agent quoted a price: {p.priceByAgent ? "YES, compliance incident raised" : "no"} · Agent rule breaks: {p.violations.length ? p.violations.join(", ").replace(/_/g, " ") : "none"}
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <Link href="/dashboard/test" className={styles.back}>
+          ← Run another test call
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default async function CallPage({ params, searchParams }: PageProps<"/dashboard/calls/[id]">) {
   await requireSession();
   const { id } = await params;
+  const sp = await searchParams;
+  const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : null);
+  const expected = one(sp.expected);
+  const expectedReason = one(sp.reason);
+  const scenarioId = one(sp.scenario);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
   const demo = isDemo();
@@ -71,6 +113,18 @@ export default async function CallPage({ params }: PageProps<"/dashboard/calls/[
       <Link href="/dashboard" className={styles.back}>
         ← Dashboard
       </Link>
+      {call.provider === "simulator" ? (
+        <SimResult
+          scenarioId={scenarioId}
+          expected={expected}
+          expectedReason={expectedReason}
+          outcome={c?.outcome ?? null}
+          reason={c?.decline_reason ?? null}
+          priceByAgent={c?.price_mentioned_by_agent ?? false}
+          violations={c?.agent_violations ?? []}
+          error={call.processing_error}
+        />
+      ) : null}
       <h1 className={styles.h1} style={{ marginTop: 10 }}>
         {c?.fields.name ? r(c.fields.name) : "Call"}
       </h1>

@@ -140,6 +140,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             <a href="#designers">Designers</a>
             <a href="#calls">Calls</a>
             <a href="#callback">Call back</a>
+            <Link href="/dashboard/test">Test calls</Link>
           </nav>
           <div className={styles.appbarRight}>
             <div>
@@ -385,6 +386,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                           <td>
                             {formatIst(when)}
                             {isAfterHours(new Date(when)) ? <span className={styles.muted}> · after hours</span> : null}
+                            {c.provider === "simulator" ? <span className={styles.muted}> · test</span> : null}
                           </td>
                           <td>{name ? redactForDisplay(name) : <span className={styles.muted}>–</span>}</td>
                           <td>
