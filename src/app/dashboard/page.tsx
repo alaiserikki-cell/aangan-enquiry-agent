@@ -518,48 +518,50 @@ export default async function Dashboard({
             </>
           )}
 
-          <Widget
-            title="Pipeline"
-            sub="HubSpot"
-            span={styles.span5}
-            meta={
-              crmConnected
-                ? pipeline.lastSyncedAt
-                  ? `synced ${formatIst(pipeline.lastSyncedAt)}`
-                  : "not synced yet"
-                : "not connected"
-            }
-          >
-            {crmConnected ? (
-              <>
-                <div
-                  className={styles.statusTop}
-                  style={{ gridTemplateColumns: "auto auto" }}
-                >
-                  <RingStat
-                    label="Open deals"
-                    value={String(pipeline.openDeals)}
-                  />
-                  <RingStat
-                    label="Won deals"
-                    value={String(pipeline.wonDeals)}
-                    tone="good"
-                  />
-                </div>
-                <p className={styles.note} style={{ marginTop: 14 }}>
-                  {pipeline.wonValue == null
-                    ? "Won value appears once someone enters it on a won deal in HubSpot."
-                    : `Won value entered in HubSpot: ${money(pipeline.wonValue, cur, 0)}`}
+          {empty && !crmConnected ? null : (
+            <Widget
+              title="Pipeline"
+              sub="HubSpot"
+              span={styles.span5}
+              meta={
+                crmConnected
+                  ? pipeline.lastSyncedAt
+                    ? `synced ${formatIst(pipeline.lastSyncedAt)}`
+                    : "not synced yet"
+                  : "not connected"
+              }
+            >
+              {crmConnected ? (
+                <>
+                  <div
+                    className={styles.statusTop}
+                    style={{ gridTemplateColumns: "auto auto" }}
+                  >
+                    <RingStat
+                      label="Open deals"
+                      value={String(pipeline.openDeals)}
+                    />
+                    <RingStat
+                      label="Won deals"
+                      value={String(pipeline.wonDeals)}
+                      tone="good"
+                    />
+                  </div>
+                  <p className={styles.note} style={{ marginTop: 14 }}>
+                    {pipeline.wonValue == null
+                      ? "Won value appears once someone enters it on a won deal in HubSpot."
+                      : `Won value entered in HubSpot: ${money(pipeline.wonValue, cur, 0)}`}
+                  </p>
+                </>
+              ) : (
+                <p className={styles.note}>
+                  HubSpot isn&apos;t connected, so leads go to designers by
+                  email only. Add HUBSPOT_ACCESS_TOKEN to track deals, wins and
+                  revenue here.
                 </p>
-              </>
-            ) : (
-              <p className={styles.note}>
-                HubSpot isn&apos;t connected, so leads go to designers by email
-                only. Add HUBSPOT_ACCESS_TOKEN to track deals, wins and revenue
-                here.
-              </p>
-            )}
-          </Widget>
+              )}
+            </Widget>
+          )}
 
           <Widget
             title="Designer list"
@@ -751,7 +753,7 @@ export default async function Dashboard({
           <Widget
             title="Call back"
             sub="Dropped calls with a number, last 30 days"
-            span={empty ? styles.span7 : styles.span4}
+            span={empty ? styles.span12 : styles.span4}
             id="callback"
           >
             {callbacks.length ? (
