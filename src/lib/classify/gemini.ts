@@ -18,7 +18,7 @@ export interface ClassifyResult {
 }
 
 export function geminiModel(): string {
-  return envOptional("GEMINI_MODEL", "gemini-2.5-flash");
+  return envOptional("GEMINI_MODEL", "gemini-3.8-flash");
 }
 
 const SYSTEM_PROMPT = `You classify phone enquiries to Aangan Studio after the call ends.
