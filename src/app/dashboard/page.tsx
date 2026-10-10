@@ -6,7 +6,6 @@ import {
   delta,
   designerStats,
   hourOfDay,
-  outcomeGroup,
   previousRange,
   serviceLevels,
   timeBuckets,

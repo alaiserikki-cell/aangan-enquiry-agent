@@ -52,21 +52,25 @@ const remaining = (deadline: number) => Math.max(300, deadline - Date.now() - 15
 /** Create the call row on the first tool call so the booking can be attached before the webhook arrives. */
 type ToolCallRow = { id: string; designer_id: string | null; booking_status: string; booking_start: string | null };
 
+/** Key for a call row created mid-call when the provider sends no call id; the webhook re-keys it by phone. */
+export const pendingCallKey = (phone: string) => `pending:${phone}`;
+
 async function ensureCallRow(tool: NormalizedToolCall): Promise<ToolCallRow | null> {
-  if (!tool.externalCallId) {
-    log.warn("tool.no_call_id");
+  const key = tool.externalCallId ?? (tool.callerPhone ? pendingCallKey(tool.callerPhone) : null);
+  if (!key) {
+    log.warn("tool.no_call_id_or_phone");
     return null;
   }
   // Insert-or-fetch in one round trip; the no-op update makes RETURNING yield the existing row.
   return sqlOne<ToolCallRow>`
     insert into calls (provider, channel, external_id, status, caller_phone)
-    values ('vaani', 'phone', ${tool.externalCallId}, 'in_call', ${tool.callerPhone})
+    values ('vaani', 'phone', ${key}, 'in_call', ${tool.callerPhone})
     on conflict (provider, external_id) do update set provider = excluded.provider
     returning id, designer_id, booking_status, booking_start`;
 }
 
 async function markBookingFailed(tool: NormalizedToolCall): Promise<void> {
-  if (!tool.externalCallId) return;
+  if (!tool.externalCallId && !tool.callerPhone) return;
   const call = await ensureCallRow(tool);
   // Never downgrade a booking that landed after the deadline fired.
   if (call) await sql`update calls set booking_status = 'booking_failed' where id = ${call.id} and booking_status <> 'booked'`;

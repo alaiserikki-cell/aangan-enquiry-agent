@@ -1,4 +1,4 @@
-import { neon, types, type NeonQueryFunction } from "@neondatabase/serverless";
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { env } from "./env";
 
 // Neon serverless Postgres over HTTP. Each query is one fetch, so it works in
@@ -9,26 +9,28 @@ const TIMESTAMPTZ = 1184;
 const NUMERIC = 1700;
 const INT8 = 20;
 
-let client: NeonQueryFunction<false, false> | null = null;
+let client: NeonQueryFunction<false, true> | null = null;
 
-function getClient(): NeonQueryFunction<false, false> {
-  client ??= neon(env("DATABASE_URL"), {
-    types: {
-      // Timestamps as ISO strings and numerics as numbers, matching the row types in types.ts.
-      getTypeParser(id, format) {
-        const base = types.getTypeParser(id, format);
-        if (id === TIMESTAMP || id === TIMESTAMPTZ) {
-          return (v: string) => {
-            const d = base(v);
-            return d instanceof Date ? d.toISOString() : d;
-          };
-        }
-        if (id === NUMERIC || id === INT8) return (v: string) => Number(v);
-        return base;
-      },
-    },
-  });
+function getClient(): NeonQueryFunction<false, true> {
+  // fullResults gives us each column's type OID, so rows can be normalised below.
+  // (The HTTP driver does not apply a custom `types` parser config.)
+  client ??= neon(env("DATABASE_URL"), { fullResults: true });
   return client;
+}
+
+/** Timestamps → ISO strings, numeric/bigint → numbers, to match the row types in types.ts. */
+function normalise<T>(result: { rows: Record<string, unknown>[]; fields: { name: string; dataTypeID: number }[] }): T[] {
+  const convert = result.fields.filter((f) => [TIMESTAMP, TIMESTAMPTZ, NUMERIC, INT8].includes(f.dataTypeID));
+  if (!convert.length) return result.rows as T[];
+  for (const row of result.rows) {
+    for (const f of convert) {
+      const v = row[f.name];
+      if (v == null) continue;
+      if (f.dataTypeID === NUMERIC || f.dataTypeID === INT8) row[f.name] = Number(v);
+      else row[f.name] = v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
+    }
+  }
+  return result.rows as T[];
 }
 
 /**
@@ -37,7 +39,8 @@ function getClient(): NeonQueryFunction<false, false> {
  * Pass objects for jsonb columns as JSON strings with a ::jsonb cast.
  */
 export async function sql<T = Record<string, unknown>>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T[]> {
-  return (await getClient()(strings, ...values)) as T[];
+  const result = await getClient()(strings, ...values);
+  return normalise<T>(result as unknown as { rows: Record<string, unknown>[]; fields: { name: string; dataTypeID: number }[] });
 }
 
 /** First row or null. */
