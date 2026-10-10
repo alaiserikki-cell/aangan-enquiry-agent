@@ -145,6 +145,8 @@ function fallback(model: string, reason: string, partial?: unknown): StoredClass
     pricing_requested: p.pricing_requested === true,
     price_mentioned_by_agent: p.price_mentioned_by_agent === true,
     agent_violations: [],
+    callback_requested: false,
+    callback_preference: null,
     confidence: 0,
     classifier_outcome: null,
     review_reason: reason,

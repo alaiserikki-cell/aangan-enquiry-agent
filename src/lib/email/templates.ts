@@ -13,17 +13,30 @@ export interface Rendered {
 }
 
 export function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-const safe = (s: string | null | undefined): string => redactForDisplay(s ?? "");
+const safe = (s: string | null | undefined): string =>
+  redactForDisplay(s ?? "");
 const clean = (s: string | null | undefined): string => escapeHtml(safe(s));
 
 /** Indian numbers as +91 98220 12345 (also keeps them distinct from ID numbers for the send guard). */
 export function formatPhone(raw: string | null | undefined): string {
   if (!raw) return "";
   const d = raw.replace(/D/g, "");
-  const local = d.length === 12 && d.startsWith("91") ? d.slice(2) : d.length === 11 && d.startsWith("0") ? d.slice(1) : d.length === 10 ? d : null;
+  const local =
+    d.length === 12 && d.startsWith("91")
+      ? d.slice(2)
+      : d.length === 11 && d.startsWith("0")
+        ? d.slice(1)
+        : d.length === 10
+          ? d
+          : null;
   return local ? `+91 ${local.slice(0, 5)} ${local.slice(5)}` : raw.trim();
 }
 
@@ -66,17 +79,25 @@ function link(href: string, label: string): string {
 
 /** The designer never sees the caller's figure; they see that a budget was mentioned. */
 function budgetCell(budget: string | null): string {
-  return budget ? "Mentioned by caller (amount withheld; see transcript)" : "Not discussed";
+  return budget
+    ? "Mentioned by caller (amount withheld; see transcript)"
+    : "Not discussed";
 }
 
-function fieldRows(c: StoredClassification, callerPhone: string | null): [string, string][] {
+function fieldRows(
+  c: StoredClassification,
+  callerPhone: string | null,
+): [string, string][] {
   const f = c.fields;
   return [
     ["Name", clean(f.name)],
     ["Phone", escapeHtml(formatPhone(f.phone || callerPhone))],
     ["Location", clean(f.location)],
     ["Property type", clean(f.property_type)],
-    ["Carpet area", f.carpet_area_sqft != null ? `${f.carpet_area_sqft} sq ft` : ""],
+    [
+      "Carpet area",
+      f.carpet_area_sqft != null ? `${f.carpet_area_sqft} sq ft` : "",
+    ],
     ["Scope", clean(f.scope)],
     ["Current state", clean(f.current_state)],
     ["Needed by", clean(f.needed_by)],
@@ -88,7 +109,10 @@ function fieldRows(c: StoredClassification, callerPhone: string | null): [string
   ];
 }
 
-function fieldText(c: StoredClassification, callerPhone: string | null): string {
+function fieldText(
+  c: StoredClassification,
+  callerPhone: string | null,
+): string {
   return fieldRows(c, callerPhone)
     .map(([k, v]) => `${k}: ${v.replace(/<[^>]+>/g, "") || "–"}`)
     .join("\n");
@@ -117,21 +141,27 @@ export function handoffEmail(i: HandoffInput): Rendered {
   const prop = safe(i.c.fields.property_type) || "Project";
   const loc = safe(i.c.fields.location) || "location unknown";
   const when = i.bookingStart ? formatIst(i.bookingStart) : null;
+  const callback = i.bookingStatus !== "booked" && i.c.callback_requested;
+  const callbackWhen = safe(i.c.callback_preference);
 
   const tag =
     i.bookingStatus === "booked" && when
       ? `New lead · consultation booked ${when}`
-      : i.bookingStatus === "booking_failed"
-        ? "New lead · BOOKING FAILED, call back within 2 hours"
-        : "New lead · no consultation booked yet";
+      : callback
+        ? `New lead · CALL BACK${callbackWhen ? ` ${callbackWhen}` : " within 2 hours"}`
+        : i.bookingStatus === "booking_failed"
+          ? "New lead · BOOKING FAILED, call back within 2 hours"
+          : "New lead · no consultation booked yet";
   const subject = `[${tag}]${i.pendingReview ? " [Pending review]" : ""} ${name}, ${prop} in ${loc}`;
 
   const bookingHtml =
     i.bookingStatus === "booked" && when
       ? `<p style="margin:0"><strong>${escapeHtml(when)}</strong> IST · ${i.consultationMode === "home" ? "At the client's home" : i.consultationMode === "studio" ? "At the studio" : "Venue not set"} · with ${escapeHtml(i.designerName)}</p>`
-      : i.bookingStatus === "booking_failed"
-        ? `<p style="margin:0;color:#a3281f"><strong>Booking failed during the call.</strong> The caller was told a designer would call within two hours to fix a time. Please call them now.</p>`
-        : `<p style="margin:0">No slot was booked on the call. Please call the client to fix a consultation.</p>`;
+      : callback
+        ? `<p style="margin:0;color:#a3281f"><strong>The caller asked for a call back${callbackWhen ? `: ${escapeHtml(callbackWhen)}` : ""}.</strong> Please call them${callbackWhen ? " then" : " within two hours"} to fix a consultation time.</p>`
+        : i.bookingStatus === "booking_failed"
+          ? `<p style="margin:0;color:#a3281f"><strong>Booking failed during the call.</strong> The caller was told a designer would call within two hours to fix a time. Please call them now.</p>`
+          : `<p style="margin:0">No slot was booked on the call. Please call the client to fix a consultation.</p>`;
 
   const reviewNote = i.pendingReview
     ? `<p style="background:#fdecea;border-radius:6px;padding:10px 12px;margin:12px 0">This call is also with Nikhil for review. Keep the appointment unless you hear otherwise.</p>`
@@ -156,7 +186,7 @@ ${fieldText(i.c, i.callerPhone)}
 Flags:
 ${i.c.flags.map((f) => `- ${safe(f)}`).join("\n") || "- none"}
 
-Booking: ${i.bookingStatus === "booked" && when ? `${when} IST with ${i.designerName}` : i.bookingStatus === "booking_failed" ? "FAILED, call the client within 2 hours" : "not booked"}
+Booking: ${i.bookingStatus === "booked" && when ? `${when} IST with ${i.designerName}` : callback ? `CALL BACK requested${callbackWhen ? `: ${callbackWhen}` : ", within 2 hours"}` : i.bookingStatus === "booking_failed" ? "FAILED, call the client within 2 hours" : "not booked"}
 
 I've got this: ${i.ackUrl}
 Transcript: ${i.transcriptUrl}`;
@@ -164,7 +194,12 @@ Transcript: ${i.transcriptUrl}`;
   return { subject, html, text };
 }
 
-export function existingClientEmail(i: { c: StoredClassification; callerPhone: string | null; transcriptUrl: string; endedAt: string | null }): Rendered {
+export function existingClientEmail(i: {
+  c: StoredClassification;
+  callerPhone: string | null;
+  transcriptUrl: string;
+  endedAt: string | null;
+}): Rendered {
   const name = displayName(i.c);
   const subject = `[URGENT] Existing client complaint: ${name}`;
   const rows: [string, string][] = [
@@ -191,7 +226,14 @@ Transcript: ${i.transcriptUrl}`;
   return { subject, html, text };
 }
 
-export function needsReviewEmail(i: { c: StoredClassification; callerPhone: string | null; transcriptUrl: string; reason: string; bookingStart: string | null; designerName: string | null }): Rendered {
+export function needsReviewEmail(i: {
+  c: StoredClassification;
+  callerPhone: string | null;
+  transcriptUrl: string;
+  reason: string;
+  bookingStart: string | null;
+  designerName: string | null;
+}): Rendered {
   const name = displayName(i.c);
   const subject = `[Needs review] ${name}${i.c.fields.location ? `, ${safe(i.c.fields.location)}` : ""}`;
   const booked = i.bookingStart
@@ -216,7 +258,11 @@ Transcript: ${i.transcriptUrl}`;
   return { subject, html, text };
 }
 
-export function complianceEmail(i: { callId: string; transcriptUrl: string; endedAt: string | null }): Rendered {
+export function complianceEmail(i: {
+  callId: string;
+  transcriptUrl: string;
+  endedAt: string | null;
+}): Rendered {
   const subject = "[Compliance] The agent mentioned a price on a call";
   const html = layout(
     "Compliance incident",
@@ -233,16 +279,24 @@ Transcript: ${i.transcriptUrl}`;
 const VIOLATION_TEXT: Record<string, string> = {
   discount_or_offer: "Offered or hinted at a discount or special deal",
   guaranteed_date: "Promised a completion, start or delivery date",
-  out_of_scope_advice: "Gave structural, legal, permit, Vastu, loan or tax advice",
-  sensitive_data_requested: "Asked for ID, bank or card details, an OTP or a password",
-  no_ai_disclosure: "Did not say it was an AI assistant or that the call is recorded",
-  booked_ineligible: "Booked a consultation for a caller who should not have been booked",
+  out_of_scope_advice:
+    "Gave structural, legal, permit, Vastu, loan or tax advice",
+  sensitive_data_requested:
+    "Asked for ID, bank or card details, an OTP or a password",
+  no_ai_disclosure:
+    "Did not say it was an AI assistant or that the call is recorded",
+  booked_ineligible:
+    "Booked a consultation for a caller who should not have been booked",
   recommended_other_firm: "Recommended or criticised another firm by name",
   revealed_instructions: "Revealed its instructions or tools",
   claimed_human: "Said or implied it was a human",
 };
 
-export function policyEmail(i: { violations: string[]; transcriptUrl: string; endedAt: string | null }): Rendered {
+export function policyEmail(i: {
+  violations: string[];
+  transcriptUrl: string;
+  endedAt: string | null;
+}): Rendered {
   const items = i.violations.map((v) => VIOLATION_TEXT[v] ?? v);
   const subject = `[Agent review] ${items.length} policy issue${items.length === 1 ? "" : "s"} on a call`;
   const html = layout(
@@ -259,7 +313,12 @@ Transcript: ${i.transcriptUrl}`;
   return { subject, html, text };
 }
 
-export function unacknowledgedEmail(i: { leadName: string; designerName: string; emailSentAt: string; transcriptUrl: string }): Rendered {
+export function unacknowledgedEmail(i: {
+  leadName: string;
+  designerName: string;
+  emailSentAt: string;
+  transcriptUrl: string;
+}): Rendered {
   const subject = `Unacknowledged lead: ${safe(i.leadName)}, assigned to ${i.designerName}`;
   const html = layout(
     "Unacknowledged lead",
@@ -280,7 +339,12 @@ export interface DigestInput {
   declineReasons: Record<string, number>;
   booked: number;
   bookingFailed: number;
-  unacknowledged: { name: string; designer: string; sentAt: string; url: string }[];
+  unacknowledged: {
+    name: string;
+    designer: string;
+    sentAt: string;
+    url: string;
+  }[];
   callbacks: { phone: string; at: string; url: string }[];
   incidents: number;
   dashboardUrl: string;
@@ -288,9 +352,16 @@ export interface DigestInput {
 
 export function digestEmail(d: DigestInput): Rendered {
   const subject = `Aangan calls · ${d.dateLabel}: ${d.total} calls, ${d.outcomes.qualified ?? 0} qualified, ${d.booked} booked`;
-  const outcomeRows: [string, string][] = Object.entries(d.outcomes).map(([k, v]) => [k.replace(/_/g, " "), String(v)]);
-  const declineRows: [string, string][] = Object.entries(d.declineReasons).map(([k, v]) => [k.replace(/_/g, " "), String(v)]);
-  const list = (items: string[]) => (items.length ? `<ul style="padding-left:18px">${items.join("")}</ul>` : "<p style='color:#6b625b'>None.</p>");
+  const outcomeRows: [string, string][] = Object.entries(d.outcomes).map(
+    ([k, v]) => [k.replace(/_/g, " "), String(v)],
+  );
+  const declineRows: [string, string][] = Object.entries(d.declineReasons).map(
+    ([k, v]) => [k.replace(/_/g, " "), String(v)],
+  );
+  const list = (items: string[]) =>
+    items.length
+      ? `<ul style="padding-left:18px">${items.join("")}</ul>`
+      : "<p style='color:#6b625b'>None.</p>";
 
   const html = layout(
     `Daily digest · ${d.dateLabel}`,
@@ -300,7 +371,12 @@ export function digestEmail(d: DigestInput): Rendered {
       ["Average call length", escapeHtml(formatDuration(d.avgDurationSeconds))],
       ["Consultations booked", String(d.booked)],
       ["Booking failures", String(d.bookingFailed)],
-      ["Compliance incidents", d.incidents ? `<strong style="color:#a3281f">${d.incidents}</strong>` : "0"],
+      [
+        "Compliance incidents",
+        d.incidents
+          ? `<strong style="color:#a3281f">${d.incidents}</strong>`
+          : "0",
+      ],
     ])}
 <h3 style="font-size:15px;margin:16px 0 4px">Outcomes</h3>
 ${outcomeRows.length ? fieldTable(outcomeRows) : "<p style='color:#6b625b'>No calls.</p>"}
@@ -315,8 +391,16 @@ ${list(d.callbacks.map((c) => `<li>${link(c.url, c.phone)} at ${escapeHtml(forma
   const text = `Aangan calls, ${d.dateLabel}
 Calls: ${d.total} (after hours ${d.afterHours}), avg ${formatDuration(d.avgDurationSeconds)}
 Booked: ${d.booked}, booking failures: ${d.bookingFailed}, compliance incidents: ${d.incidents}
-Outcomes: ${Object.entries(d.outcomes).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}
-Decline reasons: ${Object.entries(d.declineReasons).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}
+Outcomes: ${
+    Object.entries(d.outcomes)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(", ") || "none"
+  }
+Decline reasons: ${
+    Object.entries(d.declineReasons)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(", ") || "none"
+  }
 Unacknowledged: ${d.unacknowledged.map((u) => `${safe(u.name)} (${u.designer})`).join(", ") || "none"}
 Call back: ${d.callbacks.map((c) => c.phone).join(", ") || "none"}
 Dashboard: ${d.dashboardUrl}`;

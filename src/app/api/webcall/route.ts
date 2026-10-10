@@ -51,8 +51,8 @@ export async function POST(req: Request) {
 
 async function usage() {
   const enabled = envOptional("WEBCALL_ENABLED", "true") !== "false";
-  const daily = num("WEBCALL_DAILY_LIMIT", 8);
-  const total = num("WEBCALL_TOTAL_LIMIT", 20);
+  const daily = num("WEBCALL_DAILY_LIMIT", 20);
+  const total = num("WEBCALL_TOTAL_LIMIT", 40);
   const maxMinutes = Math.max(1, Math.min(10, num("WEBCALL_MAX_MINUTES", 3)));
   const [counts] = await sql<{ today: number; all: number }>`
     select count(*) filter (where created_at > date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata')::int as today,

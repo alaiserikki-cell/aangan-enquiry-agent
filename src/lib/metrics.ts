@@ -182,7 +182,12 @@ export async function loadPipeline(): Promise<Pipeline> {
 export async function loadCallbacks(): Promise<CallRow[]> {
   return sql<CallRow>`
     select * from calls
-    where outcome = 'dropped' and callback_done_at is null and caller_phone is not null and created_at >= now() - interval '30 days'
+    where callback_done_at is null and created_at >= now() - interval '30 days'
+      and (
+        (outcome = 'dropped' and caller_phone is not null)
+        -- the caller asked for a designer to call back instead of booking a slot
+        or ((classification->>'callback_requested')::boolean is true and booking_status is distinct from 'booked')
+      )
     order by created_at desc`;
 }
 

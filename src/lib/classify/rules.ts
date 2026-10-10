@@ -105,6 +105,10 @@ Return ONLY a JSON object with exactly these keys:
 - pricing_requested: boolean
 - price_mentioned_by_agent: boolean
 - agent_violations: array of codes from the AGENT AUDIT list (empty array if none)
+- callback_requested: true if the caller asked for, or accepted, a call back from a designer instead of a
+  booked consultation slot (including when the agent said a designer will call to fix a time). Otherwise false.
+- callback_preference: when the caller wants that call, in their own words (e.g. "tomorrow after 6 pm"),
+  or null if they gave no time.
 - confidence: number 0 to 1, how sure you are of the outcome.
 
 Judge only from the transcript. Never invent facts.

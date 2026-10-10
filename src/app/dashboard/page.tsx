@@ -432,7 +432,9 @@ export default async function Dashboard({
                     <dt>Consultations booked</dt>
                     <dd>{m.booked}</dd>
                     <dt>Booking failures</dt>
-                    <dd className={m.bookingFailed ? styles.alert : undefined}>{m.bookingFailed}</dd>
+                    <dd className={m.bookingFailed ? styles.alert : undefined}>
+                      {m.bookingFailed}
+                    </dd>
                     <dt>Asked about pricing</dt>
                     <dd>{m.pricingRequested}</dd>
                     <dt>Agent quoted a price</dt>
@@ -756,7 +758,7 @@ export default async function Dashboard({
 
           <Widget
             title="Call back"
-            sub="Dropped calls with a number, last 30 days"
+            sub="Callback requests and dropped calls, last 30 days"
             span={empty ? styles.span12 : styles.span4}
             id="callback"
           >
@@ -764,34 +766,54 @@ export default async function Dashboard({
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
                   <tbody>
-                    {callbacks.map((c) => (
-                      <tr key={c.id}>
-                        <td>
-                          {isDashboardPublic() ? (
-                            maskPhones(c.caller_phone ?? "")
-                          ) : (
-                            <a href={`tel:${c.caller_phone}`}>
-                              {c.caller_phone}
-                            </a>
-                          )}
-                          <div className={styles.muted}>
-                            {formatIst(c.started_at ?? c.created_at)}
-                          </div>
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          <form action={markCalledBack}>
-                            <input type="hidden" name="id" value={c.id} />
-                            <button
-                              className={styles.pill}
-                              type="submit"
-                              style={{ cursor: "pointer" }}
+                    {callbacks.map((c) => {
+                      const cls =
+                        c.classification as StoredClassification | null;
+                      const phone = c.caller_phone ?? cls?.fields?.phone ?? "";
+                      return (
+                        <tr key={c.id}>
+                          <td>
+                            {cls?.fields?.name ? (
+                              <div style={{ fontWeight: 500 }}>
+                                {redactForDisplay(cls.fields.name)}
+                              </div>
+                            ) : null}
+                            {!phone ? (
+                              <span className={styles.muted}>no number</span>
+                            ) : isDashboardPublic() ? (
+                              maskPhones(phone)
+                            ) : (
+                              <a href={`tel:${phone}`}>{phone}</a>
+                            )}
+                            <div className={styles.muted}>
+                              {cls?.callback_requested
+                                ? `Asked for a call back${cls.callback_preference ? `: ${redactForDisplay(cls.callback_preference)}` : ""}`
+                                : "Call dropped"}
+                              {" · "}
+                              {formatIst(c.started_at ?? c.created_at)}
+                            </div>
+                            <Link
+                              href={`/dashboard/calls/${c.id}`}
+                              className={styles.muted}
                             >
-                              Called back ✓
-                            </button>
-                          </form>
-                        </td>
-                      </tr>
-                    ))}
+                              Transcript →
+                            </Link>
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            <form action={markCalledBack}>
+                              <input type="hidden" name="id" value={c.id} />
+                              <button
+                                className={styles.pill}
+                                type="submit"
+                                style={{ cursor: "pointer" }}
+                              >
+                                Called back ✓
+                              </button>
+                            </form>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

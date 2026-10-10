@@ -191,6 +191,24 @@ Caller: Hi, we're opening a restaurant in Koregaon Park and need the interiors d
 Agent: Thank you for thinking of us. Restaurants need a specialist hospitality studio, which isn't what Aangan does. This sounds like it may not be the right fit for us right now, but feel free to reach out if your scope changes. Thank you for calling.`,
   },
   {
+    id: "X-CALLBACK",
+    title: "2BHK Baner, prefers a call back to booking now",
+    rule: "Callback offered: lead goes to the designer with the caller's time",
+    expected: "qualified",
+    phone: "+919811100022",
+    transcript: `${OPEN}
+Caller: Hi, I'm Rohan Mehta. I have a 2BHK in Baner, about 900 square feet, and I want the whole flat designed and executed.
+Agent: Lovely. When would you need it complete?
+Caller: No fixed deadline, maybe in four or five months.
+Agent: Will you be making the decision, or is someone else involved?
+Caller: Just me.
+Agent: What's the best number to reach you on?
+Caller: 98110 00022.
+Agent: Thank you. I can book a free consultation with one of our designers right now, or have a designer call you back at a time that suits you. Which would you prefer?
+Caller: Please have someone call me back. Tomorrow after 6 pm works.
+Agent: Done. A designer will call you tomorrow after 6 pm to plan the consultation. Thank you for calling Aangan Studio.`,
+  },
+  {
     id: "X-WRONG",
     title: "Wrong number",
     rule: "Not a lead",

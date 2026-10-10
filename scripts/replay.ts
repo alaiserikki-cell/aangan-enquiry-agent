@@ -82,6 +82,8 @@ function stubClassification(c: Case): StoredClassification {
     pricing_requested: c.pricing_requested,
     price_mentioned_by_agent: false,
     agent_violations: [],
+    callback_requested: false,
+    callback_preference: null,
     confidence: 0.95,
     classifier_outcome: null,
     review_reason: c.outcome === "needs_review" ? "stub" : null,

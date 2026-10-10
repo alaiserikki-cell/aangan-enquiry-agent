@@ -51,6 +51,10 @@ export const ClassificationBaseSchema = z.object({
   price_mentioned_by_agent: z.boolean(),
   /** Agent policy breaches found in the transcript (codes from AGENT_VIOLATIONS). Empty is the goal. */
   agent_violations: z.array(z.enum(AGENT_VIOLATIONS)).default([]),
+  /** Caller chose a call back from a designer instead of (or after failing to get) a booked slot. */
+  callback_requested: z.boolean().default(false),
+  /** When the caller would like that call, in their words ("tomorrow after 6 pm"), or null. */
+  callback_preference: z.string().nullable().default(null),
   confidence: z.number().min(0).max(1),
 });
 

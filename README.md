@@ -55,12 +55,11 @@ Copy `.env.example` → `.env.local` for local dev, and set the same keys in Ver
 3. Create an API key (Settings → Developer → API keys) → `CALCOM_API_KEY`.
 4. Callers don't give an email on the phone, so bookings carry name + phone only. To put a shared inbox on every booking, set `CALCOM_FALLBACK_ATTENDEE_EMAIL`.
 
-### 4. HubSpot (optional)
-Leave `HUBSPOT_ACCESS_TOKEN` blank to run on email only: qualified leads still reach designers, the HubSpot step is skipped, and the dashboard shows "not connected". Set it to switch on deals and the pipeline panel.
+### 4. HubSpot
+Qualified calls become a HubSpot contact plus a deal in the **Consultation booked** stage, and the dashboard's pipeline panel syncs hourly.
 
-1. Settings → Objects → Deals → Pipelines. Add a stage called **Consultation booked**, then copy its internal ID → `HUBSPOT_STAGE_CONSULTATION_BOOKED`. The pipeline ID (usually `default`) → `HUBSPOT_PIPELINE_ID`.
-2. Settings → Integrations → Private apps. Create one with scopes `crm.objects.contacts.read/write` and `crm.objects.deals.read/write` → `HUBSPOT_ACCESS_TOKEN`.
-3. The free CRM allows only **one** deal pipeline. For testing, use a separate free HubSpot account (or a developer test account) until you switch to the real one.
+1. Settings → Integrations → Private apps → create one with scopes `crm.objects.contacts.read/write`, `crm.objects.deals.read/write` and `crm.schemas.deals.read/write`. Put the token in `.env.local` and Vercel as `HUBSPOT_ACCESS_TOKEN`.
+2. Run `npm run hubspot:setup`. It checks the token, creates a test pipeline "Aangan enquiries (test)" (or, on the free plan's single pipeline, adds a **Consultation booked** stage to it) and prints `HUBSPOT_PIPELINE_ID` and `HUBSPOT_STAGE_CONSULTATION_BOOKED`. Set both in `.env.local` and Vercel, then redeploy.
 
 Deals never get an amount from this system. The dashboard's "won value" only sums amounts a person typed into HubSpot on won deals.
 
