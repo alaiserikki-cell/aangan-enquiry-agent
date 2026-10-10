@@ -397,9 +397,9 @@ export default async function Dashboard({
                       detail={l.detail}
                       footnote={
                         l.key === "handoff"
-                          ? `median ${formatDuration(m.handoffLatency.median)} · target ${formatDuration(HANDOFF_TARGET_S)}`
+                          ? `median ${formatDuration(m.handoffLatency.median)} · slowest ${formatDuration(m.handoffLatency.max)} · target ${formatDuration(HANDOFF_TARGET_S)}`
                           : l.key === "ack"
-                            ? `median ${formatDuration(m.ackLatency.median)} · ${m.unacknowledged} waiting`
+                            ? `median ${formatDuration(m.ackLatency.median)} · slowest ${formatDuration(m.ackLatency.max)} · ${m.unacknowledged} waiting`
                             : `${m.bookingFailed} booking failure${m.bookingFailed === 1 ? "" : "s"}`
                       }
                     />
@@ -429,6 +429,10 @@ export default async function Dashboard({
                     <dd>{m.total}</dd>
                     <dt>Qualified</dt>
                     <dd>{qualified}</dd>
+                    <dt>Consultations booked</dt>
+                    <dd>{m.booked}</dd>
+                    <dt>Booking failures</dt>
+                    <dd className={m.bookingFailed ? styles.alert : undefined}>{m.bookingFailed}</dd>
                     <dt>Asked about pricing</dt>
                     <dd>{m.pricingRequested}</dd>
                     <dt>Agent quoted a price</dt>
