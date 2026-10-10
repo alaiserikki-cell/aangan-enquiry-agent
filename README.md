@@ -12,7 +12,7 @@ Next.js 16 (App Router, TypeScript) on Vercel · Neon Postgres · HubSpot free C
 | Replay test | ✅ `npm run replay -- --stub` passes. Real-Gemini run needs the 12 transcripts in `tests/fixtures/transcripts/` |
 | Classification (Gemini) | ✅ written, not yet run against real transcripts |
 | Routing + emails | ✅ written, not yet run against live Neon/Resend |
-| Cal.com tools | ✅ written against Cal.com API v2, not yet run live |
+| Cal.com tools | ✅ live: Consultation event 7422764 (Mon–Sat 10:00–19:00 IST, 12 h notice, 30 min buffer), slots verified 10 Oct 2026 |
 | **Vaani adapter** | ⏳ **stub**: `src/lib/vaani/adapter.ts` returns 501 until written against Vaani's API docs |
 | HubSpot | ✅ written, not yet run live |
 | Dashboard | ✅ |
