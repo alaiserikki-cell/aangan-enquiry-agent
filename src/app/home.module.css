@@ -180,3 +180,8 @@
 .tips a {
   color: var(--brand);
 }
+
+.resultLink {
+  font-weight: 600;
+  color: var(--brand);
+}

@@ -151,6 +151,8 @@ export interface WebCallSession {
   token: string;
   connectionUrl: string;
   roomName: string;
+  /** Vaani's call id, when the trigger response includes one (transcripts may be keyed by it). */
+  callId: string | null;
 }
 
 export async function startWebCall(opts: { maxMinutes: number; greeting: string }): Promise<WebCallSession> {
@@ -177,5 +179,58 @@ export async function startWebCall(opts: { maxMinutes: number; greeting: string 
   const j = JSON.parse(text) as Record<string, unknown>;
   const token = str(j.token), connectionUrl = str(j.connection_url), roomName = str(j.room_name);
   if (!token || !connectionUrl || !roomName) throw new Error("Vaani web call: missing token/connection_url/room_name");
-  return { token, connectionUrl, roomName };
+  return { token, connectionUrl, roomName, callId: str(j.call_id) ?? str(j.id) };
+}
+
+// ---------------------------------------------------------------------------
+// Transcript pull (GET /api/transcript/{call_id}). Lets the app finish a web call itself, without
+// relying on webhook settings. The response schema is undocumented ("additionalProperties"), so we
+// look for the transcript in the shapes Vaani uses elsewhere: a "[hh:mm:ss] AGENT: ..." string, or
+// a list of {role|speaker, content|text|message} turns.
+
+const TRANSCRIPT_KEYS = ["transcript", "transcription", "conversation", "messages", "turns", "chat_history"];
+
+function turnsFrom(value: unknown, depth = 0): TranscriptTurn[] {
+  if (depth > 4 || value == null) return [];
+  if (typeof value === "string") return parseTranscript(value);
+  if (Array.isArray(value)) {
+    const turns: TranscriptTurn[] = [];
+    for (const item of value) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      const who = str(o.role) ?? str(o.speaker) ?? str(o.sender) ?? str(o.from) ?? "";
+      const text = str(o.content) ?? str(o.text) ?? str(o.message) ?? str(o.transcript);
+      if (!text || /^(system|tool|function)$/i.test(who)) continue;
+      turns.push({ role: /^(agent|assistant|bot|ai)$/i.test(who) ? "agent" : "caller", text });
+    }
+    return turns;
+  }
+  if (typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    for (const k of TRANSCRIPT_KEYS) {
+      const t = turnsFrom(o[k], depth + 1);
+      if (t.length) return t;
+    }
+    for (const k of ["data", "result", "call", "details"]) {
+      const t = turnsFrom(o[k], depth + 1);
+      if (t.length) return t;
+    }
+  }
+  return [];
+}
+
+/** Transcript for a finished call, or [] if Vaani hasn't produced it yet. Tries each id in turn. */
+export async function fetchCallTranscript(ids: string[]): Promise<TranscriptTurn[]> {
+  const apiKey = process.env.VAANI_API_KEY;
+  if (!apiKey) throw new VaaniNotConfiguredError("VAANI_API_KEY not set");
+  for (const id of ids) {
+    const res = await fetch(`https://api.vaanivoice.ai/api/transcript/${encodeURIComponent(id)}`, {
+      headers: { "X-API-Key": apiKey },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) continue;
+    const turns = turnsFrom(await res.json().catch(() => null));
+    if (turns.length) return turns;
+  }
+  return [];
 }

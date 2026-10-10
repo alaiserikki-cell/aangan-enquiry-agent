@@ -39,9 +39,9 @@ export async function POST(req: Request) {
 
   try {
     const session = await startWebCall({ maxMinutes: limits.maxMinutes, greeting: GREETING });
-    await sql`insert into web_calls (room_name, visitor_hash) values (${session.roomName}, ${visitor})`;
+    await sql`insert into web_calls (room_name, visitor_hash, vaani_call_id) values (${session.roomName}, ${visitor}, ${session.callId})`;
     log.info("webcall.started", { room: session.roomName });
-    return Response.json({ ok: true, ...session, maxMinutes: limits.maxMinutes });
+    return Response.json({ ok: true, token: session.token, connectionUrl: session.connectionUrl, roomName: session.roomName, maxMinutes: limits.maxMinutes });
   } catch (err) {
     log.error("webcall.start_failed", err);
     const reason = err instanceof VaaniNotConfiguredError ? "Web calling isn't set up yet." : "Couldn't start the call. Please try again in a minute.";
