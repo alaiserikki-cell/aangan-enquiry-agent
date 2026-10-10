@@ -1,12 +1,13 @@
 import { isAuthorizedCron } from "@/lib/cron";
 import { sql } from "@/lib/db";
-import { readDeals } from "@/lib/hubspot";
+import { hubspotEnabled, readDeals } from "@/lib/hubspot";
 
 export const maxDuration = 60;
 
 /** Hourly: pull current stage (and human-entered amount on won deals) for every deal we created. */
 export async function GET(req: Request) {
   if (!isAuthorizedCron(req)) return new Response("unauthorized", { status: 401 });
+  if (!hubspotEnabled()) return Response.json({ ok: true, skipped: "HubSpot not configured" });
 
   const rows = await sql<{ call_id: string; deal_id: string }>`select call_id, deal_id from hubspot_sync where deal_id is not null`;
   const states = new Map((await readDeals(rows.map((r) => r.deal_id))).map((s) => [s.id, s]));

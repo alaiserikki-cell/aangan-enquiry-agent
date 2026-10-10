@@ -11,7 +11,7 @@ import { getDesigner, markAssigned, pickDesigner } from "../designers";
 import { complianceEmail, existingClientEmail, handoffEmail, needsReviewEmail, policyEmail } from "../email/templates";
 import { sendEmail } from "../email/send";
 import { appUrl, env } from "../env";
-import { createDeal, upsertContact } from "../hubspot";
+import { createDeal, hubspotEnabled, upsertContact } from "../hubspot";
 import { log } from "../log";
 import { BlockedContentError, redactForDisplay } from "../price-guard";
 import { formatIst, istDateKey } from "../time";
@@ -79,6 +79,7 @@ async function runAction(action: Action, call: CallRow, c: StoredClassification)
     case "policy_incident":
       return policyIncident(call, action.violations);
     case "hubspot_deal":
+      if (!hubspotEnabled()) return log.info("hubspot.skipped_not_configured", { callId: call.id });
       return hubspotDeal(call, c);
     case "designer_handoff":
       return designerHandoff(call, c, action.pendingReview);

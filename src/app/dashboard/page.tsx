@@ -14,6 +14,7 @@ import {
   type Delta,
 } from "@/lib/dashboard-data";
 import { demoCallbacks, demoDesigners, demoPipeline, demoRange, isDemo } from "@/lib/demo";
+import { hubspotEnabled } from "@/lib/hubspot";
 import { computeMetrics, designerMap, loadCallbacks, loadPipeline, loadRange } from "@/lib/metrics";
 import { redactForDisplay } from "@/lib/price-guard";
 import { requireSession } from "@/lib/require-session";
@@ -124,6 +125,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const sparkTitles = buckets.map((b) => b.title);
   const labelEvery = range === "today" ? 3 : buckets.length > 14 ? 5 : 1;
   const now = new Date();
+  const crmConnected = demo || hubspotEnabled();
 
   return (
     <>
@@ -287,14 +289,27 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             <HourBars slots={hours} inColor="var(--series-1)" afterColor="var(--series-2)" />
           </Widget>
 
-          <Widget title="Pipeline" sub="HubSpot" span={styles.span5} meta={pipeline.lastSyncedAt ? `synced ${formatIst(pipeline.lastSyncedAt)}` : "not synced yet"}>
-            <div className={styles.statusTop} style={{ gridTemplateColumns: "auto auto" }}>
-              <RingStat label="Open deals" value={String(pipeline.openDeals)} />
-              <RingStat label="Won deals" value={String(pipeline.wonDeals)} tone="good" />
-            </div>
-            <p className={styles.note} style={{ marginTop: 14 }}>
-              {pipeline.wonValue == null ? "Won value appears once someone enters it on a won deal in HubSpot." : `Won value entered in HubSpot: ${money(pipeline.wonValue, cur, 0)}`}
-            </p>
+          <Widget
+            title="Pipeline"
+            sub="HubSpot"
+            span={styles.span5}
+            meta={crmConnected ? (pipeline.lastSyncedAt ? `synced ${formatIst(pipeline.lastSyncedAt)}` : "not synced yet") : "not connected"}
+          >
+            {crmConnected ? (
+              <>
+                <div className={styles.statusTop} style={{ gridTemplateColumns: "auto auto" }}>
+                  <RingStat label="Open deals" value={String(pipeline.openDeals)} />
+                  <RingStat label="Won deals" value={String(pipeline.wonDeals)} tone="good" />
+                </div>
+                <p className={styles.note} style={{ marginTop: 14 }}>
+                  {pipeline.wonValue == null ? "Won value appears once someone enters it on a won deal in HubSpot." : `Won value entered in HubSpot: ${money(pipeline.wonValue, cur, 0)}`}
+                </p>
+              </>
+            ) : (
+              <p className={styles.note}>
+                HubSpot isn&apos;t connected, so leads go to designers by email only. Add HUBSPOT_ACCESS_TOKEN to track deals, wins and revenue here.
+              </p>
+            )}
           </Widget>
 
           <Widget title="Designer list" sub={`${team.filter((t) => t.active).length} active designers`} span={styles.span12} id="designers">

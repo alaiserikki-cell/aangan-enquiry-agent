@@ -141,6 +141,7 @@ export function bookConsultation(tool: NormalizedToolCall): Promise<ToolResult> 
         startUtc: start.toISOString(),
         attendeeName: name,
         attendeePhone: phone,
+        address: consultationMode === "studio" ? "Studio visit (Aangan Studio)" : location ? `${location}, Pune (full address to confirm)` : "Caller's home (address to confirm)",
         notes: [location && `Location: ${location}`, consultationMode && `Consultation at: ${consultationMode}`, "Booked by the Aangan phone agent"].filter(Boolean).join(". "),
         metadata: { source: "phone_agent", ...(tool.externalCallId ? { call_id: tool.externalCallId } : {}) },
       },

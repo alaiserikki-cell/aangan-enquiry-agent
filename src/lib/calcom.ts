@@ -46,14 +46,27 @@ export interface BookingInput {
   startUtc: string;
   attendeeName: string;
   attendeePhone: string | null;
+  /** Where the consultation happens; sent as the event's "attendee address" location. */
+  address: string;
   /** Free text the designer sees on the calendar event. */
   notes: string;
   metadata: Record<string, string>;
 }
 
+/** Cal.com wants international format (+919876543210). Indian 10-digit numbers get +91. */
+export function toInternationalPhone(raw: string | null): string | null {
+  if (!raw) return null;
+  const d = raw.replace(/\D/g, "");
+  if (d.length === 10) return `+91${d}`;
+  if (d.length === 12 && d.startsWith("91")) return `+${d}`;
+  if (d.length === 11 && d.startsWith("0")) return `+91${d.slice(1)}`;
+  return raw.trim().startsWith("+") ? `+${d}` : null;
+}
+
 export async function createBooking(b: BookingInput, timeoutMs: number): Promise<{ uid: string; start: string }> {
   const attendee: Record<string, string> = { name: b.attendeeName, timeZone: IST_TZ, language: "en" };
-  if (b.attendeePhone) attendee.phoneNumber = b.attendeePhone;
+  const phone = toInternationalPhone(b.attendeePhone);
+  if (phone) attendee.phoneNumber = phone; // required by the Consultation event's booking form
   // Callers rarely give an email on the phone. If the studio wants every booking to carry one,
   // set CALCOM_FALLBACK_ATTENDEE_EMAIL (e.g. a shared leads inbox).
   const fallbackEmail = envOptional("CALCOM_FALLBACK_ATTENDEE_EMAIL");
@@ -66,6 +79,8 @@ export async function createBooking(b: BookingInput, timeoutMs: number): Promise
       start: b.startUtc,
       eventTypeId: b.eventTypeId,
       attendee,
+      // The Consultation event uses "In Person (Attendee Address)"; Cal.com requires the address.
+      location: { type: "attendeeAddress", address: b.address },
       bookingFieldsResponses: { notes: b.notes },
       metadata: b.metadata,
     }),

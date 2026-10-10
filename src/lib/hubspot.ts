@@ -42,6 +42,11 @@ export async function upsertContact(c: { name: string | null; phone: string | nu
   return created.id;
 }
 
+/** HubSpot is optional: with no token, deals are skipped and the dashboard says "not connected". */
+export function hubspotEnabled(): boolean {
+  return Boolean(process.env.HUBSPOT_ACCESS_TOKEN?.trim());
+}
+
 export function stageConsultationBooked(): string {
   return env("HUBSPOT_STAGE_CONSULTATION_BOOKED");
 }

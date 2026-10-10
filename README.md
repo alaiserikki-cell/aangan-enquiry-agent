@@ -55,7 +55,9 @@ Copy `.env.example` → `.env.local` for local dev, and set the same keys in Ver
 3. Create an API key (Settings → Developer → API keys) → `CALCOM_API_KEY`.
 4. Callers don't give an email on the phone, so bookings carry name + phone only. To put a shared inbox on every booking, set `CALCOM_FALLBACK_ATTENDEE_EMAIL`.
 
-### 4. HubSpot
+### 4. HubSpot (optional)
+Leave `HUBSPOT_ACCESS_TOKEN` blank to run on email only: qualified leads still reach designers, the HubSpot step is skipped, and the dashboard shows "not connected". Set it to switch on deals and the pipeline panel.
+
 1. Settings → Objects → Deals → Pipelines. Add a stage called **Consultation booked**, then copy its internal ID → `HUBSPOT_STAGE_CONSULTATION_BOOKED`. The pipeline ID (usually `default`) → `HUBSPOT_PIPELINE_ID`.
 2. Settings → Integrations → Private apps. Create one with scopes `crm.objects.contacts.read/write` and `crm.objects.deals.read/write` → `HUBSPOT_ACCESS_TOKEN`.
 3. The free CRM allows only **one** deal pipeline. For testing, use a separate free HubSpot account (or a developer test account) until you switch to the real one.
