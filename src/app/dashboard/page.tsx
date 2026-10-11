@@ -206,6 +206,8 @@ export default async function Dashboard({
   const crmConnected = demo || hubspotEnabled();
   // Nothing to chart yet: show how to create the first calls instead of a wall of zeros.
   const empty = !demo && m.total === 0;
+  // Without per-unit rates every cost is a fake ₹0; say "not set" instead.
+  const ratesSet = m.cost.missingRates.length === 0;
 
   return (
     <>
@@ -341,10 +343,14 @@ export default async function Dashboard({
             />
             <Kpi
               label="Cost per qualified lead"
-              value={money(m.cost.perQualified, cur)}
+              value={ratesSet ? money(m.cost.perQualified, cur) : "Not set"}
               d={delta(m.cost.perQualified, p.cost.perQualified, false)}
               compare={prev.label}
-              sub={`${money(m.cost.total, cur)} total`}
+              sub={
+                ratesSet
+                  ? `${money(m.cost.total, cur)} total`
+                  : "Add cost rates in Vercel to see this"
+              }
             />
           </section>
         )}
@@ -461,13 +467,13 @@ export default async function Dashboard({
                   <div className={styles.cell}>
                     <div className={styles.cellLabel}>Total cost</div>
                     <div className={styles.cellValue}>
-                      {money(m.cost.total, cur)}
+                      {ratesSet ? money(m.cost.total, cur) : "–"}
                     </div>
                   </div>
                   <div className={styles.cell}>
                     <div className={styles.cellLabel}>Cost per call</div>
                     <div className={styles.cellValue}>
-                      {money(m.cost.perCall, cur)}
+                      {ratesSet ? money(m.cost.perCall, cur) : "–"}
                     </div>
                   </div>
                   <div className={styles.cell}>
@@ -683,14 +689,18 @@ export default async function Dashboard({
                           <tr key={c.id}>
                             <td>
                               {formatIst(when)}
-                              {isAfterHours(new Date(when)) ? (
-                                <span className={styles.muted}>
-                                  {" "}
-                                  · after hours
-                                </span>
-                              ) : null}
-                              {c.provider === "simulator" ? (
-                                <span className={styles.muted}> · test</span>
+                              {isAfterHours(new Date(when)) ||
+                              c.provider === "simulator" ? (
+                                <div className={styles.muted}>
+                                  {[
+                                    isAfterHours(new Date(when))
+                                      ? "after hours"
+                                      : null,
+                                    c.provider === "simulator" ? "test" : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </div>
                               ) : null}
                             </td>
                             <td>
@@ -740,8 +750,11 @@ export default async function Dashboard({
                               )}
                             </td>
                             <td>
-                              <Link href={`/dashboard/calls/${c.id}`}>
-                                Transcript →
+                              <Link
+                                href={`/dashboard/calls/${c.id}`}
+                                style={{ whiteSpace: "nowrap" }}
+                              >
+                                View →
                               </Link>
                             </td>
                           </tr>

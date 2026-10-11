@@ -152,11 +152,12 @@ export function VolumeChart({ data, labelEvery = 1 }: { data: VolumePoint[]; lab
   const plotW = W - pad.l - pad.r;
   const plotH = H - pad.t - pad.b;
   const max = niceMax(Math.max(1, ...data.map((d) => d.calls)));
-  const n = Math.max(1, data.length - 1);
-  const x = (i: number) => pad.l + (data.length === 1 ? plotW / 2 : (i / n) * plotW);
+  // Grouped bars: counts per period are discrete, and sparse data reads honestly as bars.
+  const band = plotW / Math.max(1, data.length);
+  const x = (i: number) => pad.l + band * (i + 0.5); // band centre
   const y = (v: number) => pad.t + plotH - (v / max) * plotH;
-  const line = (k: "calls" | "qualified") => data.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(d[k]).toFixed(1)}`).join("");
-  const area = data.length ? `${line("calls")}L${x(data.length - 1)},${y(0)}L${x(0)},${y(0)}Z` : "";
+  const barW = Math.max(3, Math.min(22, band * 0.32));
+  const gap = Math.min(3, band * 0.04);
   const rows = (i: number) => [
     { color: "var(--series-1)", label: "calls", value: String(data[i].calls) },
     { color: "var(--series-2)", label: "qualified", value: String(data[i].qualified) },
@@ -169,12 +170,6 @@ export function VolumeChart({ data, labelEvery = 1 }: { data: VolumePoint[]; lab
   return (
     <div ref={tipRef} className={styles.chartWrap}>
       <svg viewBox={`0 0 ${W} ${H}`} className={styles.chartSvg} role="img" aria-label="Calls and qualified leads over time">
-        <defs>
-          <linearGradient id="volFill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--series-1)" stopOpacity={0.24} />
-            <stop offset="100%" stopColor="var(--series-1)" stopOpacity={0} />
-          </linearGradient>
-        </defs>
         {[0, max / 2, max].map((t) => (
           <g key={t}>
             <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} className={t === 0 ? styles.baseline : styles.gridline} />
@@ -183,9 +178,19 @@ export function VolumeChart({ data, labelEvery = 1 }: { data: VolumePoint[]; lab
             </text>
           </g>
         ))}
-        <path d={area} fill="url(#volFill)" />
-        <path d={line("calls")} fill="none" stroke="var(--series-1)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        <path d={line("qualified")} fill="none" stroke="var(--series-2)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {hover !== null ? (
+          <rect x={x(hover) - band / 2} y={pad.t} width={band} height={plotH} fill="var(--ink)" opacity={0.05} />
+        ) : null}
+        {data.map((d, i) => (
+          <g key={d.key}>
+            {d.calls > 0 ? (
+              <rect x={x(i) - barW - gap / 2} y={y(d.calls)} width={barW} height={y(0) - y(d.calls)} rx={2} fill="var(--series-1)" />
+            ) : null}
+            {d.qualified > 0 ? (
+              <rect x={x(i) + gap / 2} y={y(d.qualified)} width={barW} height={y(0) - y(d.qualified)} rx={2} fill="var(--series-2)" />
+            ) : null}
+          </g>
+        ))}
         {data.map((d, i) =>
           i % labelEvery === 0 ? (
             <text key={d.key} x={x(i)} y={H - 6} textAnchor="middle" className={styles.axisText}>
@@ -193,13 +198,6 @@ export function VolumeChart({ data, labelEvery = 1 }: { data: VolumePoint[]; lab
             </text>
           ) : null,
         )}
-        {hover !== null ? (
-          <g>
-            <line x1={x(hover)} x2={x(hover)} y1={pad.t} y2={pad.t + plotH} className={styles.crosshair} />
-            <circle cx={x(hover)} cy={y(data[hover].calls)} r={4.5} fill="var(--series-1)" stroke="var(--surface)" strokeWidth={2} />
-            <circle cx={x(hover)} cy={y(data[hover].qualified)} r={4.5} fill="var(--series-2)" stroke="var(--surface)" strokeWidth={2} />
-          </g>
-        ) : null}
         <rect
           x={pad.l}
           y={pad.t}
@@ -211,7 +209,7 @@ export function VolumeChart({ data, labelEvery = 1 }: { data: VolumePoint[]; lab
           className={styles.hitGroup}
           onPointerMove={(e) => {
             const r = e.currentTarget.getBoundingClientRect();
-            const i = Math.max(0, Math.min(data.length - 1, Math.round(((e.clientX - r.left) / r.width) * n)));
+            const i = Math.max(0, Math.min(data.length - 1, Math.floor(((e.clientX - r.left) / r.width) * data.length)));
             pick(i, e.clientX, e.clientY);
           }}
           onPointerLeave={() => {
@@ -223,7 +221,7 @@ export function VolumeChart({ data, labelEvery = 1 }: { data: VolumePoint[]; lab
             e.preventDefault();
             const i = Math.max(0, Math.min(data.length - 1, (hover ?? -1) + (e.key === "ArrowRight" ? 1 : -1)));
             const r = e.currentTarget.getBoundingClientRect();
-            pick(i, r.left + (data.length === 1 ? 0.5 : i / n) * r.width, r.top + 24);
+            pick(i, r.left + ((i + 0.5) / data.length) * r.width, r.top + 24);
           }}
           onBlur={() => {
             setHover(null);

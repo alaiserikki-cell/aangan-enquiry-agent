@@ -182,16 +182,28 @@ export function serviceLevels(calls: CallRow[], handoffs: HandoffRow[]): Service
 
   const qualified = calls.filter((c) => c.outcome === "qualified");
   const booked = qualified.filter((c) => c.booking_status === "booked").length;
+  // A call back the caller chose is a handled next step too (the agent offers book-now or call-back).
+  const callbacks = qualified.filter(
+    (c) => c.booking_status !== "booked" && (c.classification as { callback_requested?: boolean } | null)?.callback_requested === true,
+  ).length;
 
   const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : null);
   const handoffPct = pct(fast, timed.length);
   const ackPct = pct(ackedInTime, sent.length);
-  const bookedPct = pct(booked, qualified.length);
+  const bookedPct = pct(booked + callbacks, qualified.length);
 
   return [
     { key: "handoff", label: "Brief sent within 2 min", percent: handoffPct, met: fast, total: timed.length, level: levelFor(handoffPct, 90, 70), detail: `${fast} of ${timed.length} briefs` },
     { key: "ack", label: "Acknowledged within 2 h", percent: ackPct, met: ackedInTime, total: sent.length, level: levelFor(ackPct, 90, 70), detail: `${ackedInTime} of ${sent.length} leads` },
-    { key: "booked", label: "Booked on the call", percent: bookedPct, met: booked, total: qualified.length, level: levelFor(bookedPct, 80, 60), detail: `${booked} of ${qualified.length} qualified` },
+    {
+      key: "booked",
+      label: "Next step agreed on the call",
+      percent: bookedPct,
+      met: booked + callbacks,
+      total: qualified.length,
+      level: levelFor(bookedPct, 80, 60),
+      detail: `${booked} booked · ${callbacks} call-back${callbacks === 1 ? "" : "s"} · ${qualified.length} qualified`,
+    },
   ];
 }
 
